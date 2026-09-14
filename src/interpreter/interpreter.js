@@ -158,6 +158,8 @@ export class Interpreter {
       }
       case "ProcedureDeclaration":
         return; // already registered by registerProcedures
+      case "DataDeclaration":
+        return; // ADR-005 — no runtime representation; a pure naming layer over `record`
       case "ReturnStatement": {
         const v = stmt.value ? this.evaluate(stmt.value, env) : NONE;
         throw new ReturnSignal(v);

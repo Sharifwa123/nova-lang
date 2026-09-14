@@ -144,8 +144,11 @@ set-statement ::= "SET" identifier "=" expression
 DECISION: `SET` both declares (if unbound in the current scope) and assigns.
 No declaration-without-initialization. Re-`SET`ing an already-bound name in
 the *same* scope is a plain reassignment, but must be type-compatible
-(integer→decimal widening permitted; any other type change on reassignment
-is a semantic error).
+(integer and decimal interoperate freely in both directions — consistent
+with §3's arithmetic coercion already mixing them — and the variable's
+tracked type becomes `decimal` from that point on; any other type change on
+reassignment is a semantic error). This resolves §16's original open
+question about reassignment compatibility: symmetric, not one-directional.
 
 ### 4.2 Undefined names
 DECISION: referencing an unbound identifier is a semantic error (E-SEM-001),
@@ -549,22 +552,85 @@ Everything else in §1–§17 and the v0.2 amendments above is unchanged.
 
 ---
 
-## What v0.4 and beyond were (per the original design chat)
+## v0.4 Amendments — DATA Named Types (ADR-005)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-005-data-named-types.md](adr/ADR-005-data-named-types.md) for
+full rationale.
+
+**§2.6 (amended)** — `DATA` moves from the forward-reserved list into real
+grammar (the first of the six §2.6 placeholders to get one).
+
+**§9/§12 (amended)** — a new top-level declaration and a widened
+`type-name` production:
+```
+data-declaration ::= "DATA" identifier NEWLINE field-decl* "END"
+field-decl        ::= identifier ":" type-name
+type-name          ::= identifier   # a primitive, OR any DATA name (incl. itself)
+```
+
+DECISION: **zero new runtime concept** — a `DATA` type has no interpreter
+representation distinct from the anonymous `record` it names (§3, §14
+unchanged). This is purely an analysis-time naming layer.
+
+DECISION: `DATA` names and procedure names are **separate namespaces** — a
+`DATA Product` and `DO Product` can coexist.
+
+DECISION: `DATA` names are pre-registered before any field types are
+resolved (mirroring how procedure names are pre-registered for recursion),
+so self-referencing (`DATA Node ... next: Node ... END`) and
+forward-referencing types work regardless of declaration order.
+
+DECISION: a record literal used **directly** where a specific `DATA` type
+is expected (a typed parameter's argument, a typed `RETURN`'s value) is
+checked for an **exact** field match — no missing fields (`E-SEM-018`), no
+extra fields (`E-SEM-020`), and every field's value type-compatible with
+its declared type (`E-SEM-019`). Away from that point of direct
+construction, NOVA stays structurally typed as before: any `'record'`
+value can flow through generic record-typed positions, and (§4.1/§4.3
+amended) a generic `'record'` may flow into a `DATA`-typed slot and back
+— but two *different* `DATA` types remain incompatible with each other.
+
+DECISION: once a value's static type is a known `DATA` name, `.field`
+access — and `{value.field}` interpolation — is checked statically and
+returns the field's own declared type instead of `'unknown'`
+(`E-SEM-021` if the field doesn't exist). This is the actual payoff of
+`DATA`; everywhere a value's exact shape isn't statically visible, field
+access stays exactly as permissive as v0.1–v0.3.
+
+**Correctness fix picked up along the way**: §4.1's integer/decimal
+reassignment widening is **symmetric**, not the one-directional rule
+originally stated — a `decimal`-tracked variable freely accepts a later
+`integer` reassignment too (and vice versa), consistent with §3's
+arithmetic coercion already mixing the two freely. See §4.1 above.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-017 | Duplicate DATA type name |
+| E-SEM-018 | Record literal is missing a field a DATA type requires |
+| E-SEM-019 | Record literal field's type doesn't match the DATA type's declared field type |
+| E-SEM-020 | Record literal has a field the DATA type doesn't declare |
+| E-SEM-021 | Static `.field` access naming a field that doesn't exist on a known DATA type |
+
+Everything else in §1–§17 and the v0.2/v0.3 amendments above is unchanged.
+
+---
+
+## What v0.5 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.3 through v0.12, in this order, each with its own ADR:
+past v0.4 through v0.12, in this order, each with its own ADR:
 
-1. **v0.4 (ADR-005)** — `DATA Name \n field: type \n END` named-type
-   declarations — a pure naming layer over the existing structural
-   record/list machinery, zero new runtime concept.
-2. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
+1. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
    small standard library.
-3. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
+2. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
    verified against piped stdin through the real CLI.
-4. Error handling (`TRY`/catch-style), list indexing/mutation.
-5. **Static web UI** — a `PAGE` compiler target emitting HTML.
-6. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-7. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+3. Error handling (`TRY`/catch-style), list indexing/mutation.
+4. **Static web UI** — a `PAGE` compiler target emitting HTML.
+5. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+6. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

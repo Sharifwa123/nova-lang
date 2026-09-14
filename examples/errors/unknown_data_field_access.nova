@@ -1,0 +1,12 @@
+# expect: E-SEM-021
+DATA Product
+    name: text
+    price: decimal
+END
+
+DO badAccess
+    INPUT p: Product
+    SHOW p.description
+END
+
+SHOW badAccess({ name: "Widget", price: 9.99 })

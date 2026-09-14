@@ -64,10 +64,16 @@ dependency-light specifically to make that migration mechanical later.
   procedures. Call-site argument checking, return-value checking, and a
   conservative "does every path return" check — see
   `examples/typed_procedures.nova`.
-- **97/97 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.4 (ADR-005) implemented**: `DATA Name / field: type / END` named
+  types — zero new runtime concept, purely an analysis-time naming layer
+  over v0.2's record type. Record literals used directly against a `DATA`
+  type get exact field checking; `.field` access on a known `DATA`-typed
+  value is checked statically and precisely typed instead of staying
+  `'unknown'` — see `examples/data_types.nova`.
+- **114/114 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **22/22 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 9 valid programs that must run cleanly, 13
+- **25/25 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 10 valid programs that must run cleanly, 15
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -79,24 +85,27 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/typed_procedures.nova
+node src/cli.js run examples/data_types.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
 
 These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 
-- List elements may be mixed types — no type system exists yet capable of
-  expressing (or checking) "a list of integers" (ADR-003; will tighten once
-  typed lists exist, alongside typed procedures/`DATA`).
+- List elements may be mixed types, and there's no way to type a list's
+  element type ("a list of `Product`") — no typed-lists feature yet
+  (ADR-003/ADR-005; `DATA` types can annotate `INPUT`/`RETURNS` but not a
+  list's contents).
 - No list **indexing** (`list[0]`) or mutation yet — literals and `FOR EACH`
   only. That's its own later milestone (see roadmap).
 - No string concatenation operator (`+` is numeric-only); only
   `{identifier}`/`{identifier.field}` interpolation (still no arbitrary
   expressions inside `{}`).
-- No typed procedures, no `DATA`, no persistence, no stdlib, no `PAGE`/
-  `API`/`SECURITY` — all of §15's extension points are reserved at the
-  keyword/token level but carry no grammar yet.
+- No named-constructor syntax for `DATA` types (`Product { ... }`) — a bare
+  `{ ... }` record literal, checked against the expected type, is still the
+  only construction syntax.
+- No persistence, no stdlib, no `PAGE`/`API`/`SECURITY` — all still
+  reserved at the keyword/token level but carry no grammar yet.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
@@ -105,24 +114,20 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. **`DATA Name / field: type / END`** named types (v0.4 in the original,
-   its ADR-005) — explicitly designed as a pure naming layer over the
-   existing structural record/list machinery, zero new runtime concept.
-   With v0.3's typed procedures now in place, `DATA`-declared names are the
-   natural next addition to the type-annotation vocabulary alongside
-   `integer`/`decimal`/`text`/`boolean`/`list`/`record`.
-2. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
-3. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
+1. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
+   `DATA` types are the natural shape for persisted records now that both
+   exist.
+2. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
    — verify with real piped stdin through the CLI, not just canned test
    input, since it's genuinely new I/O code.
-4. Error handling, list indexing/mutation.
-5. A `PAGE` compiler target (static HTML first, then data-bound, then
+3. Error handling, list indexing/mutation.
+4. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
    specifically restricted `SAVE`/`GET`/`ASK`/arbitrary calls out of click
    handlers, and verified the restriction by trying to sneak one past the
    real CLI, not just by reading the code).
-6. From there: a minimal server/API pillar, durable storage, security
+5. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
    explicitly multi-month-plus territory, not a next milestone.
 
@@ -139,10 +144,9 @@ would catch immediately.
 
 1. This file.
 2. [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — the binding spec.
-3. [docs/adr/ADR-001-block-delimiters.md](docs/adr/ADR-001-block-delimiters.md),
-   [docs/adr/ADR-002-change-keyword.md](docs/adr/ADR-002-change-keyword.md),
-   [docs/adr/ADR-003-list-record-literals.md](docs/adr/ADR-003-list-record-literals.md),
-   and [docs/adr/ADR-004-typed-procedures.md](docs/adr/ADR-004-typed-procedures.md).
+3. The ADRs in [docs/adr/](docs/adr/), in order: block delimiters (001),
+   the `CHANGE` keyword (002), list/record literals (003), typed
+   procedures (004), `DATA` named types (005).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

@@ -1,0 +1,12 @@
+# expect: E-SEM-018
+DATA Product
+    name: text
+    price: decimal
+END
+
+DO describe RETURNS text
+    INPUT p: Product
+    RETURN "{p.name}"
+END
+
+SHOW describe({ name: "Widget" })

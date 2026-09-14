@@ -192,6 +192,7 @@ export class Parser {
         case "REPEAT": return this.parseRepeat();
         case "DO": return this.parseDo();
         case "RETURN": return this.parseReturn();
+        case "DATA": return this.parseData();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -356,6 +357,25 @@ export class Parser {
       block.statements,
       spanOf(doTok.span, end.span)
     );
+  }
+
+  // ADR-005 — data-declaration ::= "DATA" identifier NEWLINE field-decl* "END"
+  //           field-decl        ::= identifier ":" type-name
+  parseData() {
+    const dataTok = this.expectKeyword("DATA");
+    const name = this.expectIdentifier("a DATA type name");
+    this.skipNewlines();
+    const fields = [];
+    while (!this.checkKeyword("END")) {
+      if (this.atEOF()) this.unclosedBlockError(dataTok, "DATA declaration");
+      const fieldName = this.expectIdentifier("a field name");
+      this.expectPunct(":");
+      const fieldType = this.parseTypeName();
+      fields.push({ name: fieldName.value, type: fieldType, nameSpan: fieldName.span });
+      this.skipNewlines();
+    }
+    const end = this.expectKeyword("END");
+    return AST.DataDeclaration(AST.Identifier(name.value, name.span), fields, spanOf(dataTok.span, end.span));
   }
 
   parseReturn() {

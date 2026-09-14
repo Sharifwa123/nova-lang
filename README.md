@@ -20,6 +20,7 @@ node src/cli.js run examples/if_else.nova
 node src/cli.js run examples/accumulation.nova
 node src/cli.js run examples/catalog.nova
 node src/cli.js run examples/typed_procedures.nova
+node src/cli.js run examples/data_types.nova
 ```
 
 ```nova

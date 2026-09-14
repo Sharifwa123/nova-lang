@@ -12,37 +12,15 @@ function err(code, message, span, explanation = null, suggestion = null, related
   );
 }
 
-// Type-compatibility rule shared by SET reassignment and CHANGE (§4.1, §4.3).
-// Returns the resulting tracked type, or throws.
-function reassignCompatibleType(existingType, newType, name, span) {
-  if (existingType === "unknown" || newType === "unknown") return newType;
-  if (existingType === newType) return existingType;
-  if (existingType === "integer" && newType === "decimal") return "decimal";
-  err(
-    CODES.REASSIGN_TYPE_MISMATCH,
-    `"${name}" was created as ${describeType(existingType)}, but this assigns ${describeType(newType)}.`,
-    span,
-    "NOVA variables keep the same type once created (integer values may later be assigned a decimal, but no other type change is allowed).",
-    `Use a different name for the new value, or make sure the value being assigned to "${name}" is ${describeType(existingType)}.`
-  );
-}
-
 function describeType(t) {
   const article = /^[aeiou]/.test(t) ? "an" : "a";
   const names = { integer: "a number (integer)", decimal: "a number (decimal)", text: "a text value", boolean: "a boolean value" };
   return names[t] ?? `${article} ${t} value`;
 }
 
-// ADR-004 — recognized type-annotation names in v0.3 (no DATA yet, §15).
+// ADR-004/ADR-005 — recognized primitive type-annotation names. DATA names
+// (checked separately, since they're user-declared) extend this set.
 const PRIMITIVE_TYPE_NAMES = new Set(["integer", "decimal", "text", "boolean", "list", "record"]);
-
-// ADR-004 — same widening rule as SET/CHANGE reassignment, applied to
-// parameter arguments and RETURN values instead of a variable rebinding.
-function isCompatibleWithDeclared(declaredType, actualType) {
-  if (declaredType === "unknown" || actualType === "unknown") return true;
-  if (declaredType === actualType) return true;
-  return declaredType === "decimal" && actualType === "integer";
-}
 
 // ADR-004 — conservative, sound "does this statement list definitely
 // return a value on every path" check. See docs/adr/ADR-004 for the exact
@@ -64,7 +42,8 @@ function definitelyReturns(statements) {
 export class Analyzer {
   constructor(program, hostGlobals = {}) {
     this.program = program;
-    this.procedures = new Map(); // name -> { arity, node }
+    this.procedures = new Map(); // name -> { arity, node, paramTypes, returnType }
+    this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
       this.globalScope.defineLocal(name, type);
@@ -72,7 +51,10 @@ export class Analyzer {
   }
 
   analyze() {
-    this.registerProcedures(this.program.statements);
+    // Two phases so DATA types and procedures can forward- and
+    // self-reference each other regardless of declaration order (ADR-005).
+    this.registerTopLevelDeclarations(this.program.statements);
+    this.resolveTopLevelTypes();
     this.checkStatements(this.program.statements, this.globalScope, {
       insideProcedure: false,
       declaredReturnType: null,
@@ -81,18 +63,127 @@ export class Analyzer {
   }
 
   checkTypeName(typeName, span) {
-    if (typeName !== null && !PRIMITIVE_TYPE_NAMES.has(typeName)) {
+    if (typeName === null) return;
+    if (PRIMITIVE_TYPE_NAMES.has(typeName) || this.dataTypes.has(typeName)) return;
+    err(
+      CODES.UNKNOWN_TYPE_NAME,
+      `"${typeName}" is not a recognized type name.`,
+      span,
+      `Recognized type names are: ${[...PRIMITIVE_TYPE_NAMES].join(", ")}, or a DATA type declared with DATA ${typeName} ... END.`,
+      "Check the spelling, or remove the annotation."
+    );
+  }
+
+  // ADR-004/ADR-005 — shared assignability predicate for SET/CHANGE
+  // reassignment, call arguments, and RETURN values. A generic 'record'
+  // may flow into a DATA-typed slot and vice versa; two *different* DATA
+  // types remain incompatible, same as any other real type mismatch.
+  typesAreAssignable(targetType, sourceType) {
+    if (targetType === "unknown" || sourceType === "unknown") return true;
+    if (targetType === sourceType) return true;
+    // integer/decimal interoperate in both directions - rejecting e.g. a
+    // decimal-tracked variable later accepting an integer value would be
+    // needlessly surprising, and inconsistent with §3's arithmetic
+    // coercion already freely mixing the two.
+    if (
+      (targetType === "decimal" && sourceType === "integer") ||
+      (targetType === "integer" && sourceType === "decimal")
+    ) {
+      return true;
+    }
+    if (targetType === "record" && this.dataTypes.has(sourceType)) return true;
+    if (this.dataTypes.has(targetType) && sourceType === "record") return true;
+    return false;
+  }
+
+  // Type-compatibility rule for SET reassignment and CHANGE (§4.1, §4.3).
+  // Returns the resulting tracked type, or throws.
+  reassignCompatibleType(existingType, newType, name, span) {
+    if (!this.typesAreAssignable(existingType, newType)) {
       err(
-        CODES.UNKNOWN_TYPE_NAME,
-        `"${typeName}" is not a recognized type name.`,
+        CODES.REASSIGN_TYPE_MISMATCH,
+        `"${name}" was created as ${describeType(existingType)}, but this assigns ${describeType(newType)}.`,
         span,
-        `Recognized type names are: ${[...PRIMITIVE_TYPE_NAMES].join(", ")}.`,
-        "Check the spelling, or remove the annotation."
+        "NOVA variables keep the same type once created (integer values may later be assigned a decimal, but no other type change is allowed).",
+        `Use a different name for the new value, or make sure the value being assigned to "${name}" is ${describeType(existingType)}.`
       );
+    }
+    if (existingType === "unknown") return newType;
+    if (newType === "unknown") return existingType;
+    if (existingType === newType) return existingType;
+    if (existingType === "integer" && newType === "decimal") return "decimal";
+    if (existingType === "decimal" && newType === "integer") return "decimal";
+    // The only remaining assignable case: a DATA name paired with generic
+    // 'record' (in either direction) - widen down to the safe, general type
+    // rather than claim more precision than is actually known (ADR-005).
+    return "record";
+  }
+
+  // ADR-005 — validates a record literal used directly where `dataTypeName`
+  // is expected: exact field match (no missing/extra fields) and every
+  // field's value type-compatible with its declared field type.
+  checkRecordLiteralAgainstDataType(recordLiteralNode, dataTypeName, scope) {
+    const dataType = this.dataTypes.get(dataTypeName);
+    const literalFieldsByName = new Map(recordLiteralNode.fields.map((f) => [f.name, f]));
+    const declaredNames = new Set(dataType.fields.map((f) => f.name));
+
+    for (const declaredField of dataType.fields) {
+      const literalField = literalFieldsByName.get(declaredField.name);
+      if (!literalField) {
+        err(
+          CODES.MISSING_DATA_FIELD,
+          `${dataTypeName} requires a "${declaredField.name}" field, but this record literal doesn't have one.`,
+          recordLiteralNode.span,
+          null,
+          `Add "${declaredField.name}: ..." to this record literal.`,
+          [[dataType.node.name.span, `${dataTypeName} is declared here`]]
+        );
+      }
+      const fieldValueType = this.infer(literalField.value, scope);
+      if (!this.typesAreAssignable(declaredField.type, fieldValueType)) {
+        err(
+          CODES.DATA_FIELD_TYPE_MISMATCH,
+          `Field "${declaredField.name}" of ${dataTypeName} must be ${describeType(declaredField.type)}, but this is ${describeType(fieldValueType)}.`,
+          literalField.value.span,
+          null,
+          `Make "${declaredField.name}" ${describeType(declaredField.type)}.`
+        );
+      }
+    }
+    for (const literalField of recordLiteralNode.fields) {
+      if (!declaredNames.has(literalField.name)) {
+        err(
+          CODES.UNEXPECTED_DATA_FIELD,
+          `"${literalField.name}" is not a field of ${dataTypeName}.`,
+          literalField.nameSpan,
+          `${dataTypeName} only has: ${[...declaredNames].join(", ")}.`,
+          `Remove "${literalField.name}", or check the field name.`,
+          [[dataType.node.name.span, `${dataTypeName} is declared here`]]
+        );
+      }
     }
   }
 
-  registerProcedures(statements) {
+  // ADR-005 — looks up `fieldName` on the known DATA type `dataTypeName`,
+  // returning its declared type, or reporting E-SEM-021 if it doesn't
+  // exist. Shared by FieldAccess and string-interpolation path walking.
+  staticFieldType(dataTypeName, fieldName, span) {
+    const dataType = this.dataTypes.get(dataTypeName);
+    const field = dataType.fields.find((f) => f.name === fieldName);
+    if (!field) {
+      err(
+        CODES.UNKNOWN_DATA_FIELD_ACCESS,
+        `"${fieldName}" is not a field of ${dataTypeName}.`,
+        span,
+        `${dataTypeName} only has: ${dataType.fields.map((f) => f.name).join(", ")}.`,
+        "Check the field name.",
+        [[dataType.node.name.span, `${dataTypeName} is declared here`]]
+      );
+    }
+    return field.type;
+  }
+
+  registerTopLevelDeclarations(statements) {
     for (const stmt of statements) {
       if (stmt.kind === "ProcedureDeclaration") {
         const name = stmt.name.name;
@@ -107,15 +198,54 @@ export class Analyzer {
             [[prev.node.name.span, "Previous definition"]]
           );
         }
-        this.checkTypeName(stmt.returnType, stmt.name.span);
-        for (const param of stmt.parameters) this.checkTypeName(param.type, param.name.span);
-        this.procedures.set(name, {
-          arity: stmt.parameters.length,
-          node: stmt,
-          paramTypes: stmt.parameters.map((p) => p.type ?? "unknown"),
-          returnType: stmt.returnType,
-        });
+        this.procedures.set(name, { arity: stmt.parameters.length, node: stmt, paramTypes: null, returnType: null });
+      } else if (stmt.kind === "DataDeclaration") {
+        const name = stmt.name.name;
+        if (this.dataTypes.has(name)) {
+          const prev = this.dataTypes.get(name);
+          err(
+            CODES.DUPLICATE_DATA_TYPE,
+            `"${name}" is already defined.`,
+            stmt.name.span,
+            "A DATA type can only be declared once.",
+            `Rename one of the declarations, e.g. ${name}2.`,
+            [[prev.node.name.span, "Previous definition"]]
+          );
+        }
+        this.dataTypes.set(name, { node: stmt, fields: null });
       }
+    }
+  }
+
+  // Phase 2 — every DATA/procedure name is now known, so field and
+  // annotation type names can be validated regardless of declaration
+  // order, including self- and forward-references (ADR-005).
+  resolveTopLevelTypes() {
+    for (const [, dataType] of this.dataTypes) {
+      const seen = new Map();
+      const fields = [];
+      for (const field of dataType.node.fields) {
+        if (seen.has(field.name)) {
+          err(
+            CODES.DUPLICATE_FIELD,
+            `"${field.name}" is already declared in this DATA type.`,
+            field.nameSpan,
+            "A DATA type cannot declare the same field twice.",
+            `Remove one of the two "${field.name}:" entries.`,
+            [[seen.get(field.name), `"${field.name}" was first declared here`]]
+          );
+        }
+        seen.set(field.name, field.nameSpan);
+        this.checkTypeName(field.type, field.nameSpan);
+        fields.push({ name: field.name, type: field.type });
+      }
+      dataType.fields = fields;
+    }
+    for (const [, proc] of this.procedures) {
+      this.checkTypeName(proc.node.returnType, proc.node.name.span);
+      for (const param of proc.node.parameters) this.checkTypeName(param.type, param.name.span);
+      proc.paramTypes = proc.node.parameters.map((p) => p.type ?? "unknown");
+      proc.returnType = proc.node.returnType;
     }
   }
 
@@ -133,7 +263,7 @@ export class Analyzer {
         const exprType = this.infer(stmt.value, scope);
         if (scope.hasLocal(stmt.name.name)) {
           const existing = scope.getLocal(stmt.name.name);
-          const resultType = reassignCompatibleType(existing.type, exprType, stmt.name.name, stmt.span);
+          const resultType = this.reassignCompatibleType(existing.type, exprType, stmt.name.name, stmt.span);
           existing.type = resultType;
         } else {
           scope.defineLocal(stmt.name.name, exprType);
@@ -158,7 +288,7 @@ export class Analyzer {
           );
         }
         const exprType = this.infer(stmt.value, scope);
-        resolved.binding.type = reassignCompatibleType(
+        resolved.binding.type = this.reassignCompatibleType(
           resolved.binding.type,
           exprType,
           stmt.name.name,
@@ -243,8 +373,15 @@ export class Analyzer {
           );
         }
         const declaredReturnType = ctx.declaredReturnType ?? null;
+        if (declaredReturnType !== null && stmt.value && stmt.value.kind === "RecordLiteral" && this.dataTypes.has(declaredReturnType)) {
+          // Infer the literal's fields (nested errors) then check it
+          // exactly against the declared DATA shape (ADR-005).
+          this.infer(stmt.value, scope);
+          this.checkRecordLiteralAgainstDataType(stmt.value, declaredReturnType, scope);
+          return;
+        }
         const valueType = stmt.value ? this.infer(stmt.value, scope) : "none";
-        if (declaredReturnType !== null && !isCompatibleWithDeclared(declaredReturnType, valueType)) {
+        if (declaredReturnType !== null && !this.typesAreAssignable(declaredReturnType, valueType)) {
           if (stmt.value === null) {
             err(
               CODES.RETURN_TYPE_MISMATCH,
@@ -267,6 +404,11 @@ export class Analyzer {
 
       case "ExpressionStatement":
         this.infer(stmt.expression, scope);
+        return;
+
+      case "DataDeclaration":
+        // Already fully validated in resolveTopLevelTypes (phase 2) -
+        // nothing left to check when the main traversal reaches it.
         return;
 
       default:
@@ -296,6 +438,12 @@ export class Analyzer {
                 `Make sure "${part.path[0]}" is created before this line.`
               );
             }
+            // ADR-005 — walk the dotted path statically as far as DATA
+            // shape info allows; falls back to permissive once it runs out.
+            let currentType = resolved.binding.type;
+            for (let i = 1; i < part.path.length && this.dataTypes.has(currentType); i++) {
+              currentType = this.staticFieldType(currentType, part.path[i], part.span);
+            }
           }
         }
         return "text";
@@ -316,8 +464,13 @@ export class Analyzer {
       }
 
       case "FieldAccess": {
-        this.infer(expr.target, scope);
-        // No static field-type tracking in v0.1 (no DATA yet, §15).
+        const targetType = this.infer(expr.target, scope);
+        // ADR-005 — once the target's static type is a known DATA type,
+        // field access is checked (and precisely typed) statically;
+        // otherwise it stays exactly as permissive as v0.1-v0.3 ('unknown').
+        if (this.dataTypes.has(targetType)) {
+          return this.staticFieldType(targetType, expr.field, expr.span);
+        }
         return "unknown";
       }
 
@@ -396,9 +549,16 @@ export class Analyzer {
           );
         }
         expr.arguments.forEach((arg, i) => {
-          const argType = this.infer(arg, scope);
           const paramType = proc.paramTypes[i];
-          if (!isCompatibleWithDeclared(paramType, argType)) {
+          // ADR-005 — a record literal argument against a DATA-typed
+          // parameter gets exact field checking, not just 'record'~=DATA.
+          if (arg.kind === "RecordLiteral" && this.dataTypes.has(paramType)) {
+            this.infer(arg, scope);
+            this.checkRecordLiteralAgainstDataType(arg, paramType, scope);
+            return;
+          }
+          const argType = this.infer(arg, scope);
+          if (!this.typesAreAssignable(paramType, argType)) {
             err(
               CODES.ARGUMENT_TYPE_MISMATCH,
               `"${name}" expects ${describeType(paramType)} for "${proc.node.parameters[i].name.name}", but this is ${describeType(argType)}.`,

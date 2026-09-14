@@ -1,0 +1,30 @@
+# v0.4 (ADR-005): DATA gives a record shape a name. It's purely a
+# compile-time naming layer - a Product at runtime is exactly the same
+# record a plain { name: ..., price: ... } literal already produced in
+# v0.2. The payoff is real static checking: a literal used directly where
+# a Product is expected gets its fields checked exactly, and field access
+# on a Product-typed value is checked (and precisely typed) at analysis
+# time instead of waiting for a runtime surprise.
+
+DATA Product
+    name: text
+    price: decimal
+END
+
+DO describe RETURNS text
+    INPUT p: Product
+    RETURN "{p.name}: {p.price}"
+END
+
+DO applyDiscount RETURNS Product
+    INPUT p: Product
+    INPUT percentOff: decimal
+
+    RETURN { name: p.name, price: p.price - (p.price * percentOff / 100) }
+END
+
+SET widget = { name: "Widget", price: 20.00 }
+SHOW describe(widget)
+
+SET discounted = applyDiscount(widget, 25)
+SHOW describe(discounted)

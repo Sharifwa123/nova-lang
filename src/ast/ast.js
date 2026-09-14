@@ -22,6 +22,10 @@ export const ReturnStatement = (value, span) => node("ReturnStatement", { value 
 export const ExpressionStatement = (expression, span) =>
   node("ExpressionStatement", { expression }, span);
 
+// ADR-005 — `fields` is [{ name: string, type: string, nameSpan }].
+export const DataDeclaration = (name, fields, span) =>
+  node("DataDeclaration", { name, fields }, span);
+
 export const IntegerLiteral = (value, span) => node("IntegerLiteral", { value }, span);
 export const DecimalLiteral = (value, span) => node("DecimalLiteral", { value }, span);
 export const StringLiteral = (parts, span) => node("StringLiteral", { parts }, span);
