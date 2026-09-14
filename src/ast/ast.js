@@ -29,6 +29,10 @@ export const ExpressionStatement = (expression, span) =>
 export const DataDeclaration = (name, fields, span) =>
   node("DataDeclaration", { name, fields }, span);
 
+// ADR-010
+export const TryStatement = (tryBody, errorVar, catchBody, span) =>
+  node("TryStatement", { tryBody, errorVar, catchBody }, span);
+
 export const IntegerLiteral = (value, span) => node("IntegerLiteral", { value }, span);
 export const DecimalLiteral = (value, span) => node("DecimalLiteral", { value }, span);
 export const StringLiteral = (parts, span) => node("StringLiteral", { parts }, span);

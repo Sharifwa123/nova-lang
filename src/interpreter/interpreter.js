@@ -217,6 +217,21 @@ export class Interpreter {
       case "ExpressionStatement":
         this.evaluate(stmt.expression, env);
         return;
+      case "TryStatement": {
+        try {
+          this.execStatements(stmt.tryBody, env.child());
+        } catch (e) {
+          // ADR-010 — only a genuine NOVA runtime error is catchable.
+          // ReturnSignal (RETURN inside the TRY block) and any plain,
+          // non-NovaError exception (an actual interpreter bug) both
+          // propagate untouched.
+          if (!(e instanceof NovaError)) throw e;
+          const catchEnv = env.child();
+          catchEnv.defineLocal(stmt.errorVar.name, makeText(e.diagnostic.message));
+          this.execStatements(stmt.catchBody, catchEnv);
+        }
+        return;
+      }
       case "DeleteStatement": {
         const collection = this.getCollection(stmt.typeName);
         const id = this.evaluate(stmt.idExpression, env);

@@ -824,15 +824,54 @@ Everything else in §1–§17 and the v0.2–v0.7 amendments above is unchanged.
 
 ---
 
-## What v0.9 and beyond were (per the original design chat)
+## v0.9 Amendments — Error Handling: TRY / CATCH (ADR-010)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-010-error-handling.md](adr/ADR-010-error-handling.md) for
+full rationale. **Provenance note**: only the roadmap line "error handling
+(`TRY`/catch-style)" survived from the original chat.
+
+**New grammar**: `try-statement ::= "TRY" block "CATCH" identifier block
+"END"`. New keywords `TRY`, `CATCH` (`CATCH` is mandatory — no bare `TRY`).
+
+DECISION: `TRY`/`CATCH` can only ever observe **runtime** errors
+(`E-RUN-*`) — a structural consequence of §13's existing fail-fast design
+(the whole program is rejected before any statement executes on any
+lexical/syntactic/semantic error), not an arbitrary restriction layered on
+top.
+
+DECISION: `CATCH error` binds `error` to the failed diagnostic's message,
+as `text` — the smallest useful shape, consistent with `ASK` also being
+`text`-only in its first version (ADR-008). No error code/kind to match
+on, and no re-throw, yet (DEFERRED).
+
+DECISION: only genuine `NovaError`s are caught. A `RETURN`'s control-flow
+signal, and any plain (non-`NovaError`) exception — which in this codebase
+only ever means an actual interpreter bug — both pass straight through
+uncaught. A user's `TRY` can never mask a real implementation bug as an
+ordinary, anticipated failure.
+
+DECISION: `TRY`/`CATCH` extends ADR-004's "definitely returns" check the
+same way `IF`/`ELSE` does — a `TRY` statement counts as definitely
+returning only when *both* its `TRY` body and its `CATCH` body definitely
+return, which is sound because exactly one of the two always finishes
+running (unlike a loop body, which may run zero times).
+
+No new diagnostics — `TRY`/`CATCH` only changes what happens when an
+already-existing runtime error fires inside it.
+
+Everything else in §1–§17 and the v0.2–v0.8 amendments above is unchanged.
+
+---
+
+## What v0.10 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.8 through v0.12, in this order, each with its own ADR:
+past v0.9 through v0.12, in this order, each with its own ADR:
 
-1. Error handling (`TRY`/catch-style).
-2. **Static web UI** — a `PAGE` compiler target emitting HTML.
-3. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-4. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+1. **Static web UI** — a `PAGE` compiler target emitting HTML.
+2. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+3. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

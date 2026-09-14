@@ -194,6 +194,7 @@ export class Parser {
         case "RETURN": return this.parseReturn();
         case "DATA": return this.parseData();
         case "DELETE": return this.parseDelete();
+        case "TRY": return this.parseTry();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -391,6 +392,24 @@ export class Parser {
     }
     const end = this.expectKeyword("END");
     return AST.DataDeclaration(AST.Identifier(name.value, name.span), fields, spanOf(dataTok.span, end.span));
+  }
+
+  // ADR-010 — try-statement ::= "TRY" block "CATCH" identifier block "END"
+  parseTry() {
+    const tryTok = this.expectKeyword("TRY");
+    const tryBlock = this.parseBlockUntil(["CATCH"]);
+    if (tryBlock.stoppedAt === "EOF") this.unclosedBlockError(tryTok, "TRY block");
+    this.expectKeyword("CATCH");
+    const errorVar = this.expectIdentifier("an error variable name");
+    const catchBlock = this.parseBlockUntil(["END"]);
+    if (catchBlock.stoppedAt === "EOF") this.unclosedBlockError(tryTok, "TRY/CATCH block");
+    const end = this.expectKeyword("END");
+    return AST.TryStatement(
+      tryBlock.statements,
+      AST.Identifier(errorVar.value, errorVar.span),
+      catchBlock.statements,
+      spanOf(tryTok.span, end.span)
+    );
   }
 
   // ADR-006 — delete-statement ::= "DELETE" identifier expression

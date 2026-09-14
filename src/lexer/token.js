@@ -20,6 +20,7 @@ export const ACTIVE_KEYWORDS = new Set([
   "INPUT",
   "DATA",
   "SAVE", "GET", "DELETE", "ASK",
+  "TRY", "CATCH",
   "TRUE", "FALSE",
   "AND", "OR", "NOT",
 ]);

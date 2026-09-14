@@ -94,10 +94,15 @@ dependency-light specifically to make that migration mechanical later.
   keyword — see the ADR for why). Lists are now explicitly reference
   types: mutating through one alias is visible through another. See
   `examples/list_indexing.nova`.
-- **163/163 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.9 (ADR-010) implemented**: `TRY ... CATCH error ... END` for
+  runtime-only error recovery (semantic/parse errors structurally can
+  never reach a `TRY` block, per §13's fail-fast design). The caught
+  `error` is the diagnostic's message, as `text`. See
+  `examples/error_handling.nova`.
+- **175/175 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **33/33 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 14 valid programs that must run cleanly, 19
+- **34/34 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 15 valid programs that must run cleanly, 19
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -109,7 +114,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/list_indexing.nova
+node src/cli.js run examples/error_handling.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -132,8 +137,10 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 - Persistence is in-memory only (no file/durable backing yet) and has no
   `WHERE`-style filtering — `GET` always returns everything of a type.
 - Stdlib is six procedures (ADR-007). `ASK` has no text-to-number parsing
-  builtin yet (its result is always `text`). No `TRY`/`PAGE`/`API`/
-  `SECURITY` yet — still reserved at the keyword/token level, no grammar.
+  builtin yet (its result is always `text`).
+- `TRY`/`CATCH` catches runtime errors only, gives `text`-only error
+  detail (no code/kind to match on), and has no re-throw yet. No `PAGE`/
+  `API`/`SECURITY` yet — still reserved at the keyword/token level.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
@@ -142,14 +149,18 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. Error handling (`TRY`/catch-style).
-2. A `PAGE` compiler target (static HTML first, then data-bound, then
+1. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
    specifically restricted `SAVE`/`GET`/`ASK`/arbitrary calls out of click
    handlers, and verified the restriction by trying to sneak one past the
-   real CLI, not just by reading the code).
-3. From there: a minimal server/API pillar, durable storage, security
+   real CLI, not just by reading the code). This is the last item with any
+   concrete detail surviving from the original chat (the "PAGE needs a real
+   answer for how it safely calls into backend logic" concern raised in
+   the very first message of that chat) — everything past it in this list
+   is this repository's own extrapolation of the roadmap's one-line
+   mentions.
+2. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
    explicitly multi-month-plus territory, not a next milestone.
 
@@ -170,7 +181,7 @@ would catch immediately.
    the `CHANGE` keyword (002), list/record literals (003), typed
    procedures (004), `DATA` named types (005), persistence (006), the
    standard library (007), `ASK` input (008), list indexing/mutation
-   (009).
+   (009), error handling (010).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

@@ -1,0 +1,29 @@
+# v0.9 (ADR-010): TRY/CATCH catches runtime errors only - semantic/parse
+# errors can never reach a TRY block, since the whole program is rejected
+# before any statement runs (SPECIFICATION.md §13). The caught error binds
+# to its message as text.
+
+DO safeDivide RETURNS decimal
+    INPUT a: decimal
+    INPUT b: decimal
+
+    TRY
+        RETURN a / b
+    CATCH error
+        SHOW "Division failed: {error}"
+        RETURN 0
+    END
+END
+
+SHOW safeDivide(10, 2)
+SHOW safeDivide(10, 0)
+
+SET products = ["Widget", "Gadget"]
+
+TRY
+    SHOW products[5]
+CATCH error
+    SHOW "Could not read that product: {error}"
+END
+
+SHOW "Program continues normally after a caught error."

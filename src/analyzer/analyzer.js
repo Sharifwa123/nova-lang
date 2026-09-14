@@ -36,6 +36,13 @@ function definitelyReturns(statements) {
         definitelyReturns(stmt.elseBranch)
       );
     }
+    // ADR-010 — TRY/CATCH is exhaustive (exactly one of the two bodies
+    // ever finishes running: the TRY body to completion, or a CATCH body
+    // after an error partway through), the same "every branch covered"
+    // shape as IF/ELSE, unlike a loop that can run zero times.
+    if (stmt.kind === "TryStatement") {
+      return definitelyReturns(stmt.tryBody) && definitelyReturns(stmt.catchBody);
+    }
     return false;
   });
 }
@@ -470,6 +477,14 @@ export class Analyzer {
         // Already fully validated in resolveTopLevelTypes (phase 2) -
         // nothing left to check when the main traversal reaches it.
         return;
+
+      case "TryStatement": {
+        this.checkStatements(stmt.tryBody, scope.child(), ctx);
+        const catchScope = scope.child();
+        catchScope.defineLocal(stmt.errorVar.name, "text");
+        this.checkStatements(stmt.catchBody, catchScope, ctx);
+        return;
+      }
 
       case "DeleteStatement": {
         if (!this.dataTypes.has(stmt.typeName)) {
