@@ -24,6 +24,7 @@ node src/cli.js run examples/data_types.nova
 node src/cli.js run examples/persistence.nova
 node src/cli.js run examples/stdlib.nova
 printf "Ada\n7\n" | node src/cli.js run examples/ask.nova
+node src/cli.js run examples/list_indexing.nova
 ```
 
 ```nova

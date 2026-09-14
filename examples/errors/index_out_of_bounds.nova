@@ -1,0 +1,3 @@
+# expect: E-RUN-005
+SET a = [1, 2, 3]
+SHOW a[5]

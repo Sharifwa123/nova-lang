@@ -767,12 +767,69 @@ Everything else in §1–§17 and the v0.2–v0.6 amendments above is unchanged.
 
 ---
 
-## What v0.8 and beyond were (per the original design chat)
+## v0.8 Amendments — List Indexing and Mutation (ADR-009)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-009-list-indexing-mutation.md](adr/ADR-009-list-indexing-mutation.md)
+for full rationale. **Provenance note**: only the roadmap line "list
+indexing/mutation" survived from the original chat; the syntax is this
+repository's own design.
+
+**§5.1 (amended)** — postfix `[expression]` generalizes the same
+mechanism `.field` already uses (ADR-003): it follows *any* primary, and
+the two chain freely (`a[0].b[1]`).
+
+**§6.1/§4.3 (amended)** — `CHANGE` gains an optional index chain:
+```
+change-statement ::= "CHANGE" identifier ( "[" expression "]" )* "=" expression
+```
+
+DECISION: mutation reuses `CHANGE`, not `SET`, and no new keyword —
+mutating an existing list's element is, by ADR-002's own established
+distinction, always a mutation of something that already exists, never a
+declaration. `CHANGE products[0] = "..."` is the same rule (`CHANGE`
+mutates an existing binding via the same scope-chain walk as a read)
+reaching one level deeper, not a new rule.
+
+DECISION: **lists are reference types** — assigning a list to another
+variable, or passing it as an argument, shares the same underlying
+storage; `CHANGE` on one is visible through every alias. This was already
+true of the interpreter's internal representation since v0.2; this
+amendment makes it an explicit, documented language property.
+
+DECISION: `list[i]`'s static type stays `'unknown'` (no element-type
+tracking, per ADR-003's still-unchanged deferral). What *is* checked
+statically: the target must be `'list'`/`'unknown'` (`E-SEM-026`
+otherwise) and the index must be `'integer'`/`'unknown'` (`E-SEM-027`
+otherwise); genuinely unknown-until-runtime cases fall through to a
+runtime check instead (`E-RUN-006`/`E-RUN-007`).
+
+DECISION: index `0` is the first element; anything `< 0` or `>= LENGTH`
+is a runtime error (`E-RUN-005`) — no negative/from-the-end indexing yet
+(DEFERRED; purely additive to add later). Indexed `CHANGE` skips the
+ordinary same-type reassignment check, since list elements may be mixed
+types and there is no single tracked type to check against.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-026 | Indexing (`[ ]`) a value whose type is definitely not a list |
+| E-SEM-027 | A list index whose type is definitely not an integer |
+| E-RUN-005 | Index out of bounds |
+| E-RUN-006 | Runtime fallback of E-SEM-026, for an 'unknown'-typed value |
+| E-RUN-007 | Runtime fallback of E-SEM-027, for an 'unknown'-typed index |
+
+Everything else in §1–§17 and the v0.2–v0.7 amendments above is unchanged.
+
+---
+
+## What v0.9 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.7 through v0.12, in this order, each with its own ADR:
+past v0.8 through v0.12, in this order, each with its own ADR:
 
-1. Error handling (`TRY`/catch-style), list indexing/mutation.
+1. Error handling (`TRY`/catch-style).
 2. **Static web UI** — a `PAGE` compiler target emitting HTML.
 3. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
 4. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed

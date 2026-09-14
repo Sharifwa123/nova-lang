@@ -317,6 +317,36 @@ export class Analyzer {
             `If this is a new variable, use SET instead of CHANGE. If you meant to update a variable created earlier, make sure it was created with SET before this point.`
           );
         }
+        // ADR-009 — CHANGE list[i] = ... (possibly chained): mutate an
+        // element rather than the binding itself. No single tracked type
+        // exists for "element of a list" (elements may be mixed types,
+        // ADR-003), so this skips the ordinary reassignment type check.
+        if (stmt.indexPath.length > 0) {
+          let targetType = resolved.binding.type;
+          for (const indexExpr of stmt.indexPath) {
+            if (targetType !== "list" && targetType !== "unknown") {
+              err(
+                CODES.INDEX_ON_NON_LIST,
+                `Cannot index a value of type '${targetType}' with [ ].`,
+                stmt.name.span,
+                "CHANGE with [ ] requires a list.",
+                null
+              );
+            }
+            const indexType = this.infer(indexExpr, scope);
+            if (indexType !== "integer" && indexType !== "unknown") {
+              err(
+                CODES.INDEX_NOT_INTEGER,
+                `A list index must be an integer, but this is ${describeType(indexType)}.`,
+                indexExpr.span
+              );
+            }
+            targetType = "unknown"; // element type is never tracked (ADR-003/009)
+          }
+          this.infer(stmt.value, scope);
+          return;
+        }
+
         const exprType = this.infer(stmt.value, scope);
         resolved.binding.type = this.reassignCompatibleType(
           resolved.binding.type,
@@ -655,6 +685,28 @@ export class Analyzer {
           );
         }
         return "list";
+      }
+
+      case "IndexAccess": {
+        const targetType = this.infer(expr.target, scope);
+        if (targetType !== "list" && targetType !== "unknown") {
+          err(
+            CODES.INDEX_ON_NON_LIST,
+            `Cannot index a value of type '${targetType}' with [ ].`,
+            expr.target.span,
+            "[ ] indexing requires a list.",
+            null
+          );
+        }
+        const indexType = this.infer(expr.index, scope);
+        if (indexType !== "integer" && indexType !== "unknown") {
+          err(
+            CODES.INDEX_NOT_INTEGER,
+            `A list index must be an integer, but this is ${describeType(indexType)}.`,
+            expr.index.span
+          );
+        }
+        return "unknown"; // element type is never tracked (ADR-003/ADR-009)
       }
 
       case "AskExpression": {

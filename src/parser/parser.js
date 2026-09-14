@@ -227,12 +227,26 @@ export class Parser {
     return AST.SetStatement(AST.Identifier(name.value, name.span), value, spanOf(start.span, value.span));
   }
 
+  // ADR-009 — CHANGE may target a plain name or an indexed (possibly
+  // chained) list element: CHANGE x = ..., CHANGE list[i] = ...,
+  // CHANGE matrix[i][j] = ...
   parseChange() {
     const start = this.expectKeyword("CHANGE");
     const name = this.expectIdentifier("a variable name");
+    const indexPath = [];
+    while (this.checkPunct("[")) {
+      this.advance();
+      indexPath.push(this.parseExpression());
+      this.expectPunct("]");
+    }
     this.expectOperator("=");
     const value = this.parseExpression();
-    return AST.ChangeStatement(AST.Identifier(name.value, name.span), value, spanOf(start.span, value.span));
+    return AST.ChangeStatement(
+      AST.Identifier(name.value, name.span),
+      indexPath,
+      value,
+      spanOf(start.span, value.span)
+    );
   }
 
   parseIf() {
@@ -510,11 +524,19 @@ export class Parser {
 
   // ADR-003 — `.field` access follows ANY primary (literal, call, list,
   // record, or a parenthesized expression), not only identifiers.
+  // ADR-009 — `[index]` likewise, and the two chain freely: a[0].b[1].
   parsePostfix(node) {
-    while (this.checkPunct(".")) {
-      this.advance();
-      const field = this.expectIdentifier("a field name");
-      node = AST.FieldAccess(node, field.value, spanOf(node.span, field.span));
+    while (this.checkPunct(".") || this.checkPunct("[")) {
+      if (this.checkPunct(".")) {
+        this.advance();
+        const field = this.expectIdentifier("a field name");
+        node = AST.FieldAccess(node, field.value, spanOf(node.span, field.span));
+      } else {
+        this.advance(); // '['
+        const index = this.parseExpression();
+        const close = this.expectPunct("]");
+        node = AST.IndexAccess(node, index, spanOf(node.span, close.span));
+      }
     }
     return node;
   }

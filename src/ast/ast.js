@@ -8,7 +8,10 @@ export const Program = (statements, span) => node("Program", { statements }, spa
 
 export const ShowStatement = (value, span) => node("ShowStatement", { value }, span);
 export const SetStatement = (name, value, span) => node("SetStatement", { name, value }, span);
-export const ChangeStatement = (name, value, span) => node("ChangeStatement", { name, value }, span);
+// ADR-009 — `indexPath` is Expression[]; empty for a plain CHANGE x = ...,
+// non-empty for indexed mutation (CHANGE list[i] = ..., possibly chained).
+export const ChangeStatement = (name, indexPath, value, span) =>
+  node("ChangeStatement", { name, indexPath, value }, span);
 export const IfStatement = (branches, elseBranch, span) =>
   node("IfStatement", { branches, elseBranch }, span);
 export const ForEachStatement = (loopVariable, iterable, body, span) =>
@@ -53,3 +56,6 @@ export const DeleteStatement = (typeName, typeNameSpan, idExpression, span) =>
 
 // ADR-008
 export const AskExpression = (prompt, span) => node("AskExpression", { prompt }, span);
+
+// ADR-009
+export const IndexAccess = (target, index, span) => node("IndexAccess", { target, index }, span);

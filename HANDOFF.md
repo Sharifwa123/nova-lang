@@ -89,10 +89,15 @@ dependency-light specifically to make that migration mechanical later.
   through the CLI (`test/run-examples.js` now supports an optional
   `<example>.stdin` companion file; see `examples/ask.nova` +
   `examples/ask.stdin`).
-- **148/148 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.8 (ADR-009) implemented**: list indexing (`products[0]`) and
+  mutation (`CHANGE products[0] = ...`, reusing `CHANGE` rather than a new
+  keyword — see the ADR for why). Lists are now explicitly reference
+  types: mutating through one alias is visible through another. See
+  `examples/list_indexing.nova`.
+- **163/163 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **31/31 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 13 valid programs that must run cleanly, 18
+- **33/33 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 14 valid programs that must run cleanly, 19
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -104,7 +109,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-printf "Ada\n7\n" | node src/cli.js run examples/ask.nova
+node src/cli.js run examples/list_indexing.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -115,11 +120,12 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   element type ("a list of `Product`") — no typed-lists feature yet
   (ADR-003/ADR-005; `DATA` types can annotate `INPUT`/`RETURNS` but not a
   list's contents).
-- No list **indexing** (`list[0]`) or mutation yet — literals and `FOR EACH`
-  only. That's its own later milestone (see roadmap).
+- List indexing/mutation exists (`a[0]`, `CHANGE a[0] = ...`) but no
+  negative/from-the-end indexing, and no record field mutation
+  (`CHANGE someRecord.field = x`) yet — indexing was scoped to lists only.
 - No string concatenation operator (`+` is numeric-only); only
-  `{identifier}`/`{identifier.field}` interpolation (still no arbitrary
-  expressions inside `{}`).
+  `{identifier}`/`{identifier.field}` interpolation — still no arbitrary
+  expressions, and notably still no `[index]` inside `{}` either.
 - No named-constructor syntax for `DATA` types (`Product { ... }`) — a bare
   `{ ... }` record literal, checked against the expected type, is still the
   only construction syntax.
@@ -136,7 +142,7 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. Error handling, list indexing/mutation.
+1. Error handling (`TRY`/catch-style).
 2. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
@@ -163,7 +169,8 @@ would catch immediately.
 3. The ADRs in [docs/adr/](docs/adr/), in order: block delimiters (001),
    the `CHANGE` keyword (002), list/record literals (003), typed
    procedures (004), `DATA` named types (005), persistence (006), the
-   standard library (007), `ASK` input (008).
+   standard library (007), `ASK` input (008), list indexing/mutation
+   (009).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

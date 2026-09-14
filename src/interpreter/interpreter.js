@@ -137,7 +137,6 @@ export class Interpreter {
         return;
       }
       case "ChangeStatement": {
-        const v = this.evaluate(stmt.value, env);
         const target = env.resolveEnv(stmt.name.name);
         if (!target) {
           runtimeError(
@@ -146,6 +145,22 @@ export class Interpreter {
             stmt.name.span
           );
         }
+        // ADR-009 — CHANGE list[i]...[k] = value: walk down to the second-
+        // to-last container, then mutate its last index in place. Lists
+        // are reference types (ADR-009), so this mutation is visible
+        // through any other alias of the same list.
+        if (stmt.indexPath.length > 0) {
+          let container = target.vars.get(stmt.name.name);
+          for (let i = 0; i < stmt.indexPath.length - 1; i++) {
+            const idx = this.resolveListIndex(container, stmt.indexPath[i], env);
+            container = container.value[idx];
+          }
+          const lastIdx = this.resolveListIndex(container, stmt.indexPath[stmt.indexPath.length - 1], env);
+          const v = this.evaluate(stmt.value, env);
+          container.value[lastIdx] = v;
+          return;
+        }
+        const v = this.evaluate(stmt.value, env);
         target.vars.set(stmt.name.name, v);
         return;
       }
@@ -213,6 +228,39 @@ export class Interpreter {
     }
   }
 
+  // ADR-009 — shared runtime validation for both read (IndexAccess) and
+  // write (CHANGE list[i] = ...) index access. Returns the validated
+  // integer index. `indexExpr` is only needed for its span in diagnostics.
+  resolveListIndex(container, indexExpr, env) {
+    if (container.type !== "list") {
+      runtimeError(
+        CODES.RUNTIME_INDEX_ON_NON_LIST,
+        `Cannot index a value of type '${container.type}' with [ ].`,
+        indexExpr.span
+      );
+    }
+    const indexValue = this.evaluate(indexExpr, env);
+    if (indexValue.type !== "integer") {
+      runtimeError(
+        CODES.RUNTIME_INDEX_NOT_INTEGER,
+        `A list index must be an integer, but this is a ${indexValue.type} value.`,
+        indexExpr.span
+      );
+    }
+    if (indexValue.value < 0 || indexValue.value >= container.value.length) {
+      runtimeError(
+        CODES.INDEX_OUT_OF_BOUNDS,
+        `Index ${indexValue.value} is out of bounds for a list of length ${container.value.length}.`,
+        indexExpr.span,
+        null,
+        container.value.length === 0
+          ? "This list is empty."
+          : `Valid indexes are 0 to ${container.value.length - 1}.`
+      );
+    }
+    return indexValue.value;
+  }
+
   callProcedure(name, argValues, span) {
     const proc = this.procedures.get(name);
     if (!proc) {
@@ -269,6 +317,12 @@ export class Interpreter {
           runtimeError(CODES.NO_SUCH_FIELD, `This value has no field "${expr.field}".`, expr.span);
         }
         return target.value[expr.field];
+      }
+
+      case "IndexAccess": {
+        const target = this.evaluate(expr.target, env);
+        const idx = this.resolveListIndex(target, expr.index, env);
+        return target.value[idx];
       }
 
       case "UnaryOp": {

@@ -1,0 +1,24 @@
+# v0.8 (ADR-009): list[i] reads; CHANGE list[i] = value mutates in place.
+# Mutation reuses CHANGE (not SET) because changing one element of an
+# existing list is always a mutation, never a declaration - the same
+# distinction ADR-002 already established.
+
+SET products = ["Widget", "Gadget", "Gizmo"]
+SHOW products[0]
+SHOW products[1]
+SHOW products[2]
+
+CHANGE products[1] = "Gadget Pro"
+SHOW products[1]
+
+# Lists are reference types: mutating through one alias is visible
+# through another, since both point at the same underlying list.
+SET alias = products
+CHANGE alias[0] = "Widget Pro"
+SHOW products[0]
+
+# Chained indexing works for nested lists.
+SET grid = [[1, 2, 3], [4, 5, 6]]
+SHOW grid[1][2]
+CHANGE grid[0][0] = 100
+SHOW grid[0][0]
