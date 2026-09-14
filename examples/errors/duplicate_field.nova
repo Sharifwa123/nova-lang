@@ -1,0 +1,2 @@
+# expect: E-SEM-012
+SET point = { x: 1, y: 2, x: 3 }

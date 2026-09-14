@@ -457,6 +457,22 @@ export class Parser {
   }
 
   parsePrimary() {
+    const node = this.parseAtom();
+    return this.parsePostfix(node);
+  }
+
+  // ADR-003 — `.field` access follows ANY primary (literal, call, list,
+  // record, or a parenthesized expression), not only identifiers.
+  parsePostfix(node) {
+    while (this.checkPunct(".")) {
+      this.advance();
+      const field = this.expectIdentifier("a field name");
+      node = AST.FieldAccess(node, field.value, spanOf(node.span, field.span));
+    }
+    return node;
+  }
+
+  parseAtom() {
     const tok = this.current();
 
     if (tok.type === TokenType.INTEGER) {
@@ -485,6 +501,12 @@ export class Parser {
       this.expectPunct(")");
       return expr;
     }
+    if (tok.type === TokenType.PUNCTUATION && tok.value === "[") {
+      return this.parseListLiteral(tok);
+    }
+    if (tok.type === TokenType.PUNCTUATION && tok.value === "{") {
+      return this.parseRecordLiteral(tok);
+    }
     if (tok.type === TokenType.IDENTIFIER) {
       this.advance();
       let node = AST.Identifier(tok.value, tok.span);
@@ -501,12 +523,6 @@ export class Parser {
         const closeParen = this.expectPunct(")");
         node = AST.CallExpression(node, args, spanOf(tok.span, closeParen.span));
       }
-
-      while (this.checkPunct(".")) {
-        this.advance();
-        const field = this.expectIdentifier("a field name");
-        node = AST.FieldAccess(node, field.value, spanOf(node.span, field.span));
-      }
       return node;
     }
 
@@ -515,6 +531,51 @@ export class Parser {
       `Expected an expression, but found ${this.describeToken(tok)}.`,
       tok
     );
+  }
+
+  // ADR-003 — list-literal ::= "[" ( expression ( "," expression )* ","? )? "]"
+  parseListLiteral(openTok) {
+    this.advance(); // '['
+    this.skipNewlines();
+    const elements = [];
+    if (!this.checkPunct("]")) {
+      elements.push(this.parseExpression());
+      this.skipNewlines();
+      while (this.matchPunct(",")) {
+        this.skipNewlines();
+        if (this.checkPunct("]")) break; // trailing comma
+        elements.push(this.parseExpression());
+        this.skipNewlines();
+      }
+    }
+    const close = this.expectPunct("]");
+    return AST.ListLiteral(elements, spanOf(openTok.span, close.span));
+  }
+
+  // ADR-003 — record-literal ::= "{" ( field-init ( "," field-init )* ","? )? "}"
+  parseRecordLiteral(openTok) {
+    this.advance(); // '{'
+    this.skipNewlines();
+    const fields = [];
+    if (!this.checkPunct("}")) {
+      fields.push(this.parseFieldInit());
+      this.skipNewlines();
+      while (this.matchPunct(",")) {
+        this.skipNewlines();
+        if (this.checkPunct("}")) break; // trailing comma
+        fields.push(this.parseFieldInit());
+        this.skipNewlines();
+      }
+    }
+    const close = this.expectPunct("}");
+    return AST.RecordLiteral(fields, spanOf(openTok.span, close.span));
+  }
+
+  parseFieldInit() {
+    const name = this.expectIdentifier("a field name");
+    this.expectPunct(":");
+    const value = this.parseExpression();
+    return { name: name.value, value, nameSpan: name.span };
   }
 }
 

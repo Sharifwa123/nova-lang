@@ -348,6 +348,7 @@ Implemented codes (see [src/diagnostics/codes.js](../src/diagnostics/codes.js)):
 | E-SEM-009 | Call-expression arity mismatch |
 | E-SEM-010 | Call to an undefined procedure |
 | E-SEM-011 | Equality between mismatched types |
+| E-SEM-012 | Duplicate field name in a record literal (v0.2, ADR-003) |
 | E-RUN-001 | Division by zero |
 | E-RUN-002 | No such field on a record (dotted field access / interpolation) |
 
@@ -439,26 +440,77 @@ Source → Lexer → Tokens → Parser → AST → Semantic Analysis → Interpr
 
 ---
 
-## What v0.2 and beyond were (per the original design chat)
+## v0.2 Amendments — List and Record Literals (ADR-003)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-003-list-record-literals.md](adr/ADR-003-list-record-literals.md)
+for full rationale.
+
+**§2.8 (amended)** — `[`, `]`, `{`, `}` are now tokens, in addition to
+everything §2.8 already listed. `:` (already reserved since v0.1) is now
+given real grammar as the `field: value` separator in a record literal.
+
+**§5.1 (amended)** — `primary` gains two new alternatives:
+```
+primary       ::= literal | identifier ("." identifier)*
+                 | call-expression | list-literal | record-literal
+                 | "(" expression ")"
+list-literal   ::= "[" ( expression ( "," expression )* ","? )? "]"
+record-literal ::= "{" ( field-init ( "," field-init )* ","? )? "}"
+field-init     ::= identifier ":" expression
+```
+A trailing comma before the closing bracket is permitted.
+
+DECISION: list elements may be of **mixed types** — v0.1/v0.2 has no type
+system capable of expressing "a list of integers," so nothing yet exists to
+check homogeneity against (DEFERRED until typed lists exist).
+
+DECISION: a record literal with a **repeated field name is a semantic
+error** (`E-SEM-012`) — not "last value wins." Discarding an earlier field
+silently is exactly the hidden behavior NOVA's philosophy rejects.
+
+DECISION: postfix `.field` access now follows **any** primary expression
+(a call, a list, a record, a parenthesized expression), not only
+identifiers — `{ x: 1 }.x` and `makePoint().x` are both legal.
+
+DECISION: `==`/`!=` structural equality (already defined for `list` in
+v0.1) now also covers `record`: two records are equal iff they have the
+same field names and every field's value is (recursively) equal.
+
+New diagnostic:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-012 | Duplicate field name in a record literal |
+
+Consequence worth calling out explicitly: `FOR EACH x IN [1, 2, 3]` and
+`FOR EACH product IN [{ name: "Widget", price: 9.99 }]` now need **zero**
+host injection — see [examples/catalog.nova](../examples/catalog.nova) for
+the first fully self-contained `FOR EACH`-over-records example in this
+repo's history.
+
+Everything else in §1–§17 above is unchanged by v0.2.
+
+---
+
+## What v0.3 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.1 through v0.12, in this order, each with its own ADR:
+past v0.2 through v0.12, in this order, each with its own ADR:
 
-1. **v0.2** — list and record literals (`[1, 2, 3]`, `{ x: 1, y: 2 }`),
-   real syntax replacing the v0.1 host-injection-only list mechanism.
-2. **v0.3** — typed procedures (parameter/return type annotations, checked
+1. **v0.3** — typed procedures (parameter/return type annotations, checked
    by the analyzer).
-3. **v0.4 (ADR-005)** — `DATA Name \n field: type \n END` named-type
+2. **v0.4 (ADR-005)** — `DATA Name \n field: type \n END` named-type
    declarations — a pure naming layer over the existing structural
    record/list machinery, zero new runtime concept.
-4. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
+3. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
    small standard library.
-5. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
+4. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
    verified against piped stdin through the real CLI.
-6. Error handling (`TRY`/catch-style), list indexing/mutation.
-7. **Static web UI** — a `PAGE` compiler target emitting HTML.
-8. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-9. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+5. Error handling (`TRY`/catch-style), list indexing/mutation.
+6. **Static web UI** — a `PAGE` compiler target emitting HTML.
+7. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+8. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

@@ -1,0 +1,16 @@
+# v0.2 (ADR-003): list and record literals mean FOR EACH no longer needs
+# any host-injected data - this is fully self-contained.
+
+SET products = [
+    { name: "Widget", price: 9.99 },
+    { name: "Gadget", price: 19.99 },
+    { name: "Gizmo", price: 4.50 }
+]
+
+SET total = 0
+FOR EACH product IN products
+    SHOW "{product.name}: {product.price}"
+    CHANGE total = total + product.price
+END
+
+SHOW "Total: {total}"

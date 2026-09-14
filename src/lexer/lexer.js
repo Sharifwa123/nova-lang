@@ -6,7 +6,7 @@ import { CODES } from "../diagnostics/codes.js";
 
 const TWO_CHAR_OPERATORS = ["==", "!=", "<=", ">="];
 const ONE_CHAR_OPERATORS = new Set(["=", "<", ">", "+", "-", "*", "/"]);
-const PUNCTUATION = new Set(["(", ")", ".", ",", ":"]);
+const PUNCTUATION = new Set(["(", ")", ".", ",", ":", "[", "]", "{", "}"]);
 
 function isLetter(ch) {
   return /[A-Za-z]/.test(ch);

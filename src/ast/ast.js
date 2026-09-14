@@ -31,3 +31,7 @@ export const BinaryOp = (operator, left, right, span) =>
   node("BinaryOp", { operator, left, right }, span);
 export const CallExpression = (callee, args, span) =>
   node("CallExpression", { callee, arguments: args }, span);
+
+// ADR-003 — `fields` is an array of { name: string, value: Expression, nameSpan }.
+export const ListLiteral = (elements, span) => node("ListLiteral", { elements }, span);
+export const RecordLiteral = (fields, span) => node("RecordLiteral", { fields }, span);

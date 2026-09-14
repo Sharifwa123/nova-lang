@@ -52,12 +52,23 @@ export function display(v) {
   }
 }
 
+// ADR-003 - structural equality for records, matching the list behavior
+// already established in v0.1: two records are equal iff they have the
+// same field names and every field's value is (recursively) equal.
 export function valuesEqual(a, b) {
   if (a.type !== b.type) return false;
   if (a.type === "list") {
     return (
       a.value.length === b.value.length &&
       a.value.every((item, i) => valuesEqual(item, b.value[i]))
+    );
+  }
+  if (a.type === "record") {
+    const aKeys = Object.keys(a.value);
+    const bKeys = Object.keys(b.value);
+    return (
+      aKeys.length === bKeys.length &&
+      aKeys.every((k) => Object.prototype.hasOwnProperty.call(b.value, k) && valuesEqual(a.value[k], b.value[k]))
     );
   }
   return a.value === b.value;

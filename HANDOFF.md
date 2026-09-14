@@ -54,10 +54,14 @@ dependency-light specifically to make that migration mechanical later.
   adopted before any code was written in the original design process, so
   treating it as core rather than a later add-on is faithful to that
   history.
-- **67/67 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.2 (ADR-003) implemented**: real `[1, 2, 3]` list and `{ x: 1, y: 2 }`
+  record literal syntax. `FOR EACH` and `.field` access no longer need any
+  host-injected data — see `examples/catalog.nova` for the first fully
+  self-contained list-of-records example in this repo.
+- **83/83 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **17/17 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 7 valid programs that must run cleanly, 10
+- **19/19 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 8 valid programs that must run cleanly, 11
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -69,21 +73,21 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/accumulation.nova
+node src/cli.js run examples/catalog.nova
 ```
 
-## Known, deliberate v0.1 limitations (not bugs)
+## Known, deliberate limitations (not bugs)
 
 These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 
-- No list or record **literal syntax** — `FOR EACH x IN xs` only works if a
-  host embedding injects a list (see `Interpreter`'s `hostGlobals`
-  parameter, and `test/interpreter.test.js`/`test/analyzer.test.js` for how
-  tests do this). The example programs in `examples/` therefore avoid
-  `FOR EACH` and demonstrate accumulation via `REPEAT` + `CHANGE` instead
-  (`examples/accumulation.nova`).
+- List elements may be mixed types — no type system exists yet capable of
+  expressing (or checking) "a list of integers" (ADR-003; will tighten once
+  typed lists exist, alongside typed procedures/`DATA`).
+- No list **indexing** (`list[0]`) or mutation yet — literals and `FOR EACH`
+  only. That's its own later milestone (see roadmap).
 - No string concatenation operator (`+` is numeric-only); only
-  `{identifier}`/`{identifier.field}` interpolation.
+  `{identifier}`/`{identifier.field}` interpolation (still no arbitrary
+  expressions inside `{}`).
 - No typed procedures, no `DATA`, no persistence, no stdlib, no `PAGE`/
   `API`/`SECURITY` — all of §15's extension points are reserved at the
   keyword/token level but carry no grammar yet.
@@ -95,26 +99,23 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. **List and record literals** (the original's v0.2) — real syntax
-   (`[1, 2, 3]`, `{ x: 1, y: 2 }`) replacing the current host-injection-only
-   mechanism. This unblocks writing genuinely useful example programs.
-2. **Typed procedures** (v0.3) — parameter/return type annotations, checked
+1. **Typed procedures** (v0.3) — parameter/return type annotations, checked
    by the analyzer (which already has an `infer()` pass to extend).
-3. **`DATA Name / field: type / END`** named types (v0.4 in the original,
+2. **`DATA Name / field: type / END`** named types (v0.4 in the original,
    its ADR-005) — explicitly designed as a pure naming layer over the
    existing structural record/list machinery, zero new runtime concept.
-4. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
-5. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
+3. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
+4. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
    — verify with real piped stdin through the CLI, not just canned test
    input, since it's genuinely new I/O code.
-6. Error handling, list indexing/mutation.
-7. A `PAGE` compiler target (static HTML first, then data-bound, then
+5. Error handling, list indexing/mutation.
+6. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
    specifically restricted `SAVE`/`GET`/`ASK`/arbitrary calls out of click
    handlers, and verified the restriction by trying to sneak one past the
    real CLI, not just by reading the code).
-8. From there: a minimal server/API pillar, durable storage, security
+7. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
    explicitly multi-month-plus territory, not a next milestone.
 
@@ -131,8 +132,9 @@ would catch immediately.
 
 1. This file.
 2. [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — the binding spec.
-3. [docs/adr/ADR-001-block-delimiters.md](docs/adr/ADR-001-block-delimiters.md)
-   and [docs/adr/ADR-002-change-keyword.md](docs/adr/ADR-002-change-keyword.md).
+3. [docs/adr/ADR-001-block-delimiters.md](docs/adr/ADR-001-block-delimiters.md),
+   [docs/adr/ADR-002-change-keyword.md](docs/adr/ADR-002-change-keyword.md),
+   and [docs/adr/ADR-003-list-record-literals.md](docs/adr/ADR-003-list-record-literals.md).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

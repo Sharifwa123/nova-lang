@@ -4,7 +4,7 @@
 // AST: by the time this runs, the analyzer has already rejected every
 // program with a statically-detectable error.
 import {
-  NONE, makeInt, makeDec, makeText, makeBool,
+  NONE, makeInt, makeDec, makeText, makeBool, makeList, makeRecord,
   display, valuesEqual, resultNumericType,
 } from "./values.js";
 import { Diagnostic, NovaError } from "../diagnostics/diagnostic.js";
@@ -236,6 +236,15 @@ export class Interpreter {
       case "CallExpression": {
         const args = expr.arguments.map((a) => this.evaluate(a, env)); // left-to-right (§5.6)
         return this.callProcedure(expr.callee.name, args, expr.span);
+      }
+
+      case "ListLiteral":
+        return makeList(expr.elements.map((el) => this.evaluate(el, env))); // left-to-right (§5.6)
+
+      case "RecordLiteral": {
+        const fields = {};
+        for (const f of expr.fields) fields[f.name] = this.evaluate(f.value, env); // left-to-right
+        return makeRecord(fields);
       }
 
       default:

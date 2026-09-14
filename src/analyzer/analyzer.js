@@ -239,6 +239,32 @@ export class Analyzer {
         return "unknown";
       }
 
+      case "ListLiteral": {
+        // Elements may be mixed types (ADR-003) - infer each only to catch
+        // nested errors (undefined names, bad operators, etc).
+        for (const el of expr.elements) this.infer(el, scope);
+        return "list";
+      }
+
+      case "RecordLiteral": {
+        const seen = new Map();
+        for (const field of expr.fields) {
+          if (seen.has(field.name)) {
+            err(
+              CODES.DUPLICATE_FIELD,
+              `"${field.name}" is already set in this record.`,
+              field.nameSpan,
+              "A record literal cannot set the same field twice - the later value would silently win, discarding the first.",
+              `Remove one of the two "${field.name}:" entries.`,
+              [[seen.get(field.name), `"${field.name}" was first set here`]]
+            );
+          }
+          seen.set(field.name, field.nameSpan);
+          this.infer(field.value, scope);
+        }
+        return "record";
+      }
+
       case "UnaryOp": {
         const t = this.infer(expr.operand, scope);
         if (expr.operator === "NOT") {
