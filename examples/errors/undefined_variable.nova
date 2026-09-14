@@ -1,0 +1,2 @@
+# expect: E-SEM-001
+SHOW product.name

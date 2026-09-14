@@ -1,0 +1,2 @@
+# expect: E-SEM-004
+SET total = "5" + 5

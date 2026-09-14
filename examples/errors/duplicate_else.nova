@@ -1,0 +1,8 @@
+# expect: E-PARSE-003
+IF age >= 18
+    SHOW "Adult"
+ELSE
+    SHOW "Minor"
+ELSE
+    SHOW "Unreachable"
+END

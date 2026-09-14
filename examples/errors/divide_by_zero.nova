@@ -1,0 +1,2 @@
+# expect: E-RUN-001
+SHOW 5 / 0

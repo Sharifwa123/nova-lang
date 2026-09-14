@@ -1,0 +1,7 @@
+SET name = "World"
+SHOW "Hello {name}"
+
+SET price = 9.99
+SET quantity = 3
+SET total = price * quantity
+SHOW "Total: {total}"

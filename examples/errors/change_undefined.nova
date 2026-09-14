@@ -1,0 +1,2 @@
+# expect: E-SEM-006
+CHANGE total = total + 5

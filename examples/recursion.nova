@@ -1,0 +1,11 @@
+DO factorial
+    INPUT n
+
+    IF n <= 1
+        RETURN 1
+    END
+    RETURN n * factorial(n - 1)
+END
+
+SHOW factorial(5)
+SHOW factorial(10)

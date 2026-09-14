@@ -1,0 +1,3 @@
+# expect: E-PARSE-002
+SHOW "Hello"
+END

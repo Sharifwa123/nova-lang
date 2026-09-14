@@ -1,0 +1,11 @@
+SET age = 15
+
+IF age >= 65
+    SHOW "Senior"
+ELSE IF age >= 18
+    SHOW "Adult"
+ELSE IF age >= 13
+    SHOW "Teen"
+ELSE
+    SHOW "Child"
+END

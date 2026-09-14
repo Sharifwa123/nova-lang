@@ -1,0 +1,33 @@
+// AST node shapes — see docs/SPECIFICATION.md §12.
+// Every node is intent-bearing, not syntax-bearing: it carries `kind`,
+// its semantic fields, and `span` (a SourceSpan) for diagnostics.
+
+const node = (kind, fields, span) => ({ kind, ...fields, span });
+
+export const Program = (statements, span) => node("Program", { statements }, span);
+
+export const ShowStatement = (value, span) => node("ShowStatement", { value }, span);
+export const SetStatement = (name, value, span) => node("SetStatement", { name, value }, span);
+export const ChangeStatement = (name, value, span) => node("ChangeStatement", { name, value }, span);
+export const IfStatement = (branches, elseBranch, span) =>
+  node("IfStatement", { branches, elseBranch }, span);
+export const ForEachStatement = (loopVariable, iterable, body, span) =>
+  node("ForEachStatement", { loopVariable, iterable, body }, span);
+export const RepeatStatement = (count, body, span) => node("RepeatStatement", { count, body }, span);
+export const ProcedureDeclaration = (name, parameters, body, span) =>
+  node("ProcedureDeclaration", { name, parameters, body }, span);
+export const ReturnStatement = (value, span) => node("ReturnStatement", { value }, span);
+export const ExpressionStatement = (expression, span) =>
+  node("ExpressionStatement", { expression }, span);
+
+export const IntegerLiteral = (value, span) => node("IntegerLiteral", { value }, span);
+export const DecimalLiteral = (value, span) => node("DecimalLiteral", { value }, span);
+export const StringLiteral = (parts, span) => node("StringLiteral", { parts }, span);
+export const BooleanLiteral = (value, span) => node("BooleanLiteral", { value }, span);
+export const Identifier = (name, span) => node("Identifier", { name }, span);
+export const FieldAccess = (target, field, span) => node("FieldAccess", { target, field }, span);
+export const UnaryOp = (operator, operand, span) => node("UnaryOp", { operator, operand }, span);
+export const BinaryOp = (operator, left, right, span) =>
+  node("BinaryOp", { operator, left, right }, span);
+export const CallExpression = (callee, args, span) =>
+  node("CallExpression", { callee, arguments: args }, span);

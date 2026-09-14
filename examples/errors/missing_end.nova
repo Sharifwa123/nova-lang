@@ -1,0 +1,3 @@
+# expect: E-PARSE-001
+IF age >= 18
+    SHOW "Adult"

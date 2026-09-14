@@ -1,0 +1,10 @@
+DO calculateTotal
+    INPUT price
+    INPUT quantity
+
+    SET total = price * quantity
+    RETURN total
+END
+
+SHOW calculateTotal(10, 3)
+SHOW calculateTotal(2.5, 4)

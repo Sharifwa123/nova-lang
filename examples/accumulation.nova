@@ -1,0 +1,14 @@
+# Demonstrates ADR-002's CHANGE keyword: SET always creates/updates the
+# CURRENT scope only, so a plain SET inside REPEAT/FOR EACH re-shadows a
+# fresh local every iteration and can't accumulate. CHANGE walks outward
+# to the binding that already exists and mutates it in place.
+
+SET total = 0
+SET counter = 1
+
+REPEAT 5 TIMES
+    CHANGE total = total + counter
+    CHANGE counter = counter + 1
+END
+
+SHOW total

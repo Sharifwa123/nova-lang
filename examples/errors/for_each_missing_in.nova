@@ -1,0 +1,4 @@
+# expect: E-PARSE-004
+FOR EACH product products
+    SHOW product
+END

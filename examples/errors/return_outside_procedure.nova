@@ -1,0 +1,3 @@
+# expect: E-SEM-005
+SHOW "start"
+RETURN 5
