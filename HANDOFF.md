@@ -76,10 +76,15 @@ dependency-light specifically to make that migration mechanical later.
   survive verbatim — this is this repo's own design (same ADR-first
   discipline, the same three reserved keywords) — see
   `examples/persistence.nova`.
-- **127/127 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.6 (ADR-007) implemented**: a small standard library — `UPPER`,
+  `LOWER`, `TRIM`, `LENGTH`, `ROUND`, `ABS` — called with exactly the same
+  syntax as a user `DO` procedure, sharing its namespace (redefining one is
+  a duplicate-procedure error, not silent shadowing). See
+  `examples/stdlib.nova`.
+- **139/139 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **27/27 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 11 valid programs that must run cleanly, 16
+- **29/29 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 12 valid programs that must run cleanly, 17
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -91,7 +96,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/persistence.nova
+node src/cli.js run examples/stdlib.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -112,8 +117,8 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   only construction syntax.
 - Persistence is in-memory only (no file/durable backing yet) and has no
   `WHERE`-style filtering — `GET` always returns everything of a type.
-- No stdlib, no `PAGE`/`API`/`SECURITY` — all still reserved at the
-  keyword/token level but carry no grammar yet.
+- Stdlib is six procedures (ADR-007); no `ASK`/`TRY`/`PAGE`/`API`/
+  `SECURITY` yet — still reserved at the keyword/token level, no grammar.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
@@ -122,20 +127,17 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. A small standard library (string/number helper procedures — the
-   original bundled this with persistence as "v0.5-v0.6"; this repo split
-   them into separate milestones/ADRs, one real capability at a time).
-2. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
+1. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
    — verify with real piped stdin through the CLI, not just canned test
    input, since it's genuinely new I/O code.
-3. Error handling, list indexing/mutation.
-4. A `PAGE` compiler target (static HTML first, then data-bound, then
+2. Error handling, list indexing/mutation.
+3. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
    specifically restricted `SAVE`/`GET`/`ASK`/arbitrary calls out of click
    handlers, and verified the restriction by trying to sneak one past the
    real CLI, not just by reading the code).
-5. From there: a minimal server/API pillar, durable storage, security
+4. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
    explicitly multi-month-plus territory, not a next milestone.
 
@@ -154,7 +156,8 @@ would catch immediately.
 2. [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — the binding spec.
 3. The ADRs in [docs/adr/](docs/adr/), in order: block delimiters (001),
    the `CHANGE` keyword (002), list/record literals (003), typed
-   procedures (004), `DATA` named types (005), persistence (006).
+   procedures (004), `DATA` named types (005), persistence (006), the
+   standard library (007).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

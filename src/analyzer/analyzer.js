@@ -5,6 +5,7 @@
 import { Scope } from "./scope.js";
 import { Diagnostic, NovaError } from "../diagnostics/diagnostic.js";
 import { CODES } from "../diagnostics/codes.js";
+import { BUILTINS } from "../stdlib/builtins.js";
 
 function err(code, message, span, explanation = null, suggestion = null, relatedSpans = []) {
   throw new NovaError(
@@ -47,6 +48,17 @@ export class Analyzer {
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
       this.globalScope.defineLocal(name, type);
+    }
+    // ADR-007 — built-ins share the procedure namespace and call syntax
+    // with user DO declarations; `node: null` marks "no source location".
+    for (const b of BUILTINS) {
+      this.procedures.set(b.name, {
+        arity: b.paramNames.length,
+        node: null,
+        paramNames: b.paramNames,
+        paramTypes: b.paramTypes,
+        returnType: b.returnType,
+      });
     }
   }
 
@@ -189,6 +201,17 @@ export class Analyzer {
         const name = stmt.name.name;
         if (this.procedures.has(name)) {
           const prev = this.procedures.get(name);
+          if (prev.node === null) {
+            // ADR-007 — colliding with a built-in: no source location to
+            // cite as "previous definition", so a dedicated message instead.
+            err(
+              CODES.DUPLICATE_PROCEDURE,
+              `"${name}" is a built-in procedure and cannot be redefined.`,
+              stmt.name.span,
+              null,
+              `Rename this procedure, e.g. ${name}2.`
+            );
+          }
           err(
             CODES.DUPLICATE_PROCEDURE,
             `"${name}" is already defined.`,
@@ -198,7 +221,13 @@ export class Analyzer {
             [[prev.node.name.span, "Previous definition"]]
           );
         }
-        this.procedures.set(name, { arity: stmt.parameters.length, node: stmt, paramTypes: null, returnType: null });
+        this.procedures.set(name, {
+          arity: stmt.parameters.length,
+          node: stmt,
+          paramNames: stmt.parameters.map((p) => p.name.name),
+          paramTypes: null,
+          returnType: null,
+        });
       } else if (stmt.kind === "DataDeclaration") {
         const name = stmt.name.name;
         if (this.dataTypes.has(name)) {
@@ -242,6 +271,7 @@ export class Analyzer {
       dataType.fields = fields;
     }
     for (const [, proc] of this.procedures) {
+      if (proc.node === null) continue; // built-in (ADR-007) - already fully resolved
       this.checkTypeName(proc.node.returnType, proc.node.name.span);
       for (const param of proc.node.parameters) this.checkTypeName(param.type, param.name.span);
       proc.paramTypes = proc.node.parameters.map((p) => p.type ?? "unknown");
@@ -568,11 +598,12 @@ export class Analyzer {
             expr.span,
             null,
             `Call it with exactly ${proc.arity} argument(s), matching its INPUT declarations.`,
-            [[proc.node.name.span, `"${name}" is declared here`]]
+            proc.node ? [[proc.node.name.span, `"${name}" is declared here`]] : []
           );
         }
         expr.arguments.forEach((arg, i) => {
           const paramType = proc.paramTypes[i];
+          const paramName = proc.paramNames[i];
           // ADR-005 — a record literal argument against a DATA-typed
           // parameter gets exact field checking, not just 'record'~=DATA.
           if (arg.kind === "RecordLiteral" && this.dataTypes.has(paramType)) {
@@ -584,11 +615,11 @@ export class Analyzer {
           if (!this.typesAreAssignable(paramType, argType)) {
             err(
               CODES.ARGUMENT_TYPE_MISMATCH,
-              `"${name}" expects ${describeType(paramType)} for "${proc.node.parameters[i].name.name}", but this is ${describeType(argType)}.`,
+              `"${name}" expects ${describeType(paramType)} for "${paramName}", but this is ${describeType(argType)}.`,
               arg.span,
               null,
               `Pass a value of type ${paramType}, or change the parameter's declared type.`,
-              [[proc.node.parameters[i].name.span, `"${proc.node.parameters[i].name.name}" is declared here`]]
+              proc.node ? [[proc.node.parameters[i].name.span, `"${paramName}" is declared here`]] : []
             );
           }
         });

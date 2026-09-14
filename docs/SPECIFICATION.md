@@ -682,18 +682,61 @@ unchanged.
 
 ---
 
-## What v0.6 and beyond were (per the original design chat)
+## v0.6 Amendments — A Small Standard Library (ADR-007)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-007-standard-library.md](adr/ADR-007-standard-library.md) for
+full rationale. **Provenance note**: the original chat's exact stdlib
+surface didn't survive verbatim; `UPPER` is preserved from a concrete
+detail that did survive (it's named twice in the original's own bug-fix
+narrative), the rest is this repository's own small, deliberately narrow
+choice.
+
+Six built-ins, called with **exactly** the same syntax as a `DO` procedure
+— no separate "builtin call" form:
+
+| Name | Signature | Behavior |
+|---|---|---|
+| `UPPER` | `(text) RETURNS text` | Uppercase |
+| `LOWER` | `(text) RETURNS text` | Lowercase |
+| `TRIM` | `(text) RETURNS text` | Strip leading/trailing whitespace |
+| `LENGTH` | `(unknown) RETURNS integer` | Length of `text` or `list`; `E-RUN-003` otherwise |
+| `ROUND` | `(unknown) RETURNS integer` | Nearest integer to a number; `E-RUN-003` otherwise |
+| `ABS` | `(unknown) RETURNS decimal` | Absolute value of a number; `E-RUN-003` otherwise |
+
+DECISION: built-ins occupy the **same procedure namespace** as user `DO`
+declarations — a `DO UPPER ... END` collides with the built-in exactly
+like redeclaring any other procedure (`E-SEM-002`), not silent shadowing.
+
+DECISION: `UPPER`/`LOWER`/`TRIM` have a real, statically-checked `text`
+parameter type, exactly like a user-typed procedure. `LENGTH`/`ROUND`/
+`ABS` are typed `'unknown'` and checked **at the call** instead — NOVA has
+no union/polymorphic type-annotation syntax, and these three are the only
+places genuinely needing one; adding that machinery for three built-ins
+was declined for the same reason ADR-003 declined full string-
+interpolation expressions (real complexity for a narrow, not-yet-broadly-
+needed case). New diagnostic `E-RUN-003` covers the runtime check.
+
+DECISION: `ABS` always declares return type `decimal`, even for an
+`integer` input — costs nothing given `integer` already widens into
+`decimal` contexts everywhere (§3), and avoids inventing a per-argument
+return type just for this one builtin.
+
+Everything else in §1–§17 and the v0.2–v0.5 amendments above is unchanged.
+
+---
+
+## What v0.7 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.5 through v0.12, in this order, each with its own ADR:
+past v0.6 through v0.12, in this order, each with its own ADR:
 
-1. A small standard library.
-2. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
+1. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
    verified against piped stdin through the real CLI.
-3. Error handling (`TRY`/catch-style), list indexing/mutation.
-4. **Static web UI** — a `PAGE` compiler target emitting HTML.
-5. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-6. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+2. Error handling (`TRY`/catch-style), list indexing/mutation.
+3. **Static web UI** — a `PAGE` compiler target emitting HTML.
+4. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+5. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

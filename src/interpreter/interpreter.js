@@ -9,6 +9,7 @@ import {
 } from "./values.js";
 import { Diagnostic, NovaError } from "../diagnostics/diagnostic.js";
 import { CODES } from "../diagnostics/codes.js";
+import { BUILTINS } from "../stdlib/builtins.js";
 
 // Runtime environment — mirrors analyzer/scope.js's Scope one-for-one so
 // CHANGE resolves identically at analysis time and run time (ADR-002).
@@ -62,9 +63,15 @@ export class Interpreter {
     for (const [name, value] of Object.entries(hostGlobals)) {
       this.globalEnv.defineLocal(name, value);
     }
-    this.procedures = new Map(); // name -> { params: [string], body: Block }
+    this.procedures = new Map(); // name -> { params: [string], body: Block } | { params, native: fn }
     this.store = new Map(); // ADR-006 — DATA type name -> { nextId, records: Map<id, value> }
     this.write = write;
+    // ADR-007 — built-ins share the same procedure table user DO
+    // declarations populate; registerProcedures (run per `run()`) adds
+    // user procedures on top of these without clearing them.
+    for (const b of BUILTINS) {
+      this.procedures.set(b.name, { params: b.paramNames, native: b.impl });
+    }
   }
 
   // ADR-006 — every DATA type gets its collection lazily, on first use.
@@ -192,6 +199,7 @@ export class Interpreter {
     if (!proc) {
       runtimeError(CODES.UNDEFINED_PROCEDURE, `"${name}" is not a defined procedure.`, span);
     }
+    if (proc.native) return proc.native(argValues, span); // ADR-007
     const env = this.globalEnv.child(); // §8.3 — parent is global scope, not the call site.
     proc.params.forEach((p, i) => env.defineLocal(p, argValues[i]));
     try {

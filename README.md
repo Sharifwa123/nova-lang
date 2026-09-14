@@ -22,6 +22,7 @@ node src/cli.js run examples/catalog.nova
 node src/cli.js run examples/typed_procedures.nova
 node src/cli.js run examples/data_types.nova
 node src/cli.js run examples/persistence.nova
+node src/cli.js run examples/stdlib.nova
 ```
 
 ```nova

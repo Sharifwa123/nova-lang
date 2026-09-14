@@ -40,4 +40,5 @@ export const CODES = {
 
   DIVIDE_BY_ZERO: "E-RUN-001",
   NO_SUCH_FIELD: "E-RUN-002",
+  BUILTIN_ARGUMENT_TYPE: "E-RUN-003",
 };

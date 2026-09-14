@@ -1,0 +1,17 @@
+# v0.6 (ADR-007): a small standard library, called with the exact same
+# syntax as any DO procedure - no separate "builtin call" syntax.
+
+SHOW UPPER("hello")
+SHOW LOWER("WORLD")
+SHOW TRIM("   padded text   ")
+SHOW LENGTH("hello")
+SHOW LENGTH([1, 2, 3, 4])
+SHOW ROUND(3.7)
+SHOW ABS(-9.5)
+
+DO shout RETURNS text
+    INPUT s: text
+    RETURN UPPER(TRIM(s))
+END
+
+SHOW shout("   quiet   ")

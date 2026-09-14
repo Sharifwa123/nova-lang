@@ -1,0 +1,2 @@
+# expect: E-RUN-003
+SHOW LENGTH(5)
