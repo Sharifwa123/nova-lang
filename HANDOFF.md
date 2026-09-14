@@ -58,10 +58,16 @@ dependency-light specifically to make that migration mechanical later.
   record literal syntax. `FOR EACH` and `.field` access no longer need any
   host-injected data — see `examples/catalog.nova` for the first fully
   self-contained list-of-records example in this repo.
-- **83/83 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.3 (ADR-004) implemented**: optional parameter/return type
+  annotations on `DO`/`INPUT`/`RETURN` (`INPUT price: decimal`, `DO f
+  RETURNS text`), fully backward compatible with untyped v0.1/v0.2
+  procedures. Call-site argument checking, return-value checking, and a
+  conservative "does every path return" check — see
+  `examples/typed_procedures.nova`.
+- **97/97 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **19/19 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 8 valid programs that must run cleanly, 11
+- **22/22 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 9 valid programs that must run cleanly, 13
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -73,7 +79,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/catalog.nova
+node src/cli.js run examples/typed_procedures.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -99,23 +105,24 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. **Typed procedures** (v0.3) — parameter/return type annotations, checked
-   by the analyzer (which already has an `infer()` pass to extend).
-2. **`DATA Name / field: type / END`** named types (v0.4 in the original,
+1. **`DATA Name / field: type / END`** named types (v0.4 in the original,
    its ADR-005) — explicitly designed as a pure naming layer over the
    existing structural record/list machinery, zero new runtime concept.
-3. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
-4. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
+   With v0.3's typed procedures now in place, `DATA`-declared names are the
+   natural next addition to the type-annotation vocabulary alongside
+   `integer`/`decimal`/`text`/`boolean`/`list`/`record`.
+2. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
+3. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
    — verify with real piped stdin through the CLI, not just canned test
    input, since it's genuinely new I/O code.
-5. Error handling, list indexing/mutation.
-6. A `PAGE` compiler target (static HTML first, then data-bound, then
+4. Error handling, list indexing/mutation.
+5. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
    specifically restricted `SAVE`/`GET`/`ASK`/arbitrary calls out of click
    handlers, and verified the restriction by trying to sneak one past the
    real CLI, not just by reading the code).
-7. From there: a minimal server/API pillar, durable storage, security
+6. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
    explicitly multi-month-plus territory, not a next milestone.
 
@@ -134,7 +141,8 @@ would catch immediately.
 2. [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — the binding spec.
 3. [docs/adr/ADR-001-block-delimiters.md](docs/adr/ADR-001-block-delimiters.md),
    [docs/adr/ADR-002-change-keyword.md](docs/adr/ADR-002-change-keyword.md),
-   and [docs/adr/ADR-003-list-record-literals.md](docs/adr/ADR-003-list-record-literals.md).
+   [docs/adr/ADR-003-list-record-literals.md](docs/adr/ADR-003-list-record-literals.md),
+   and [docs/adr/ADR-004-typed-procedures.md](docs/adr/ADR-004-typed-procedures.md).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

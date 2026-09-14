@@ -318,15 +318,32 @@ export class Parser {
     return AST.RepeatStatement(count, block.statements, spanOf(repeatTok.span, end.span));
   }
 
+  // ADR-004 — optional "RETURNS type" after the name, optional ": type"
+  // after each INPUT parameter name.
+  parseTypeName() {
+    const tok = this.expectIdentifier("a type name");
+    return tok.value;
+  }
+
   parseDo() {
     const doTok = this.expectKeyword("DO");
     const name = this.expectIdentifier("a procedure name");
+    let returnType = null;
+    if (this.checkKeyword("RETURNS")) {
+      this.advance();
+      returnType = this.parseTypeName();
+    }
     this.skipNewlines();
     const parameters = [];
     while (this.checkKeyword("INPUT")) {
       this.advance();
       const paramName = this.expectIdentifier("a parameter name");
-      parameters.push(AST.Identifier(paramName.value, paramName.span));
+      let paramType = null;
+      if (this.checkPunct(":")) {
+        this.advance();
+        paramType = this.parseTypeName();
+      }
+      parameters.push({ name: AST.Identifier(paramName.value, paramName.span), type: paramType });
       this.skipNewlines();
     }
     const block = this.parseBlockUntil(["END"]);
@@ -335,6 +352,7 @@ export class Parser {
     return AST.ProcedureDeclaration(
       AST.Identifier(name.value, name.span),
       parameters,
+      returnType,
       block.statements,
       spanOf(doTok.span, end.span)
     );

@@ -1,0 +1,7 @@
+# expect: E-SEM-015
+DO greet
+    INPUT name: text
+    SHOW "Hello {name}"
+END
+
+SHOW greet(5)

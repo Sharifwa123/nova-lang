@@ -76,7 +76,7 @@ test("parser: DO / INPUT / RETURN and call expression", () => {
   );
   const [proc, set] = strip(program.statements);
   assertEqual(proc.kind, "ProcedureDeclaration");
-  assertEqual(proc.parameters.map((p) => p.name), ["price", "quantity"]);
+  assertEqual(proc.parameters.map((p) => p.name.name), ["price", "quantity"]);
   assertEqual(proc.body[0].kind, "ReturnStatement");
   assertEqual(set.value.kind, "CallExpression");
   assertEqual(set.value.arguments.length, 2);

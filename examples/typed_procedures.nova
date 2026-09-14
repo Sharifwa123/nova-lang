@@ -1,0 +1,28 @@
+# v0.3 (ADR-004): optional parameter/return type annotations. Omitting
+# them keeps the old, fully-permissive v0.1/v0.2 behavior (see
+# examples/procedures.nova) - annotating opts a procedure into real
+# call-site and return-path checking.
+
+DO calculateTotal RETURNS decimal
+    INPUT price: decimal
+    INPUT quantity: integer
+
+    RETURN price * quantity
+END
+
+DO classifyAge RETURNS text
+    INPUT age: integer
+
+    IF age >= 65
+        RETURN "senior"
+    ELSE IF age >= 18
+        RETURN "adult"
+    ELSE
+        RETURN "minor"
+    END
+END
+
+SHOW calculateTotal(9.99, 3)
+SHOW classifyAge(70)
+SHOW classifyAge(30)
+SHOW classifyAge(10)

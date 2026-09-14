@@ -1,0 +1,9 @@
+# expect: E-SEM-014
+DO maybeReturn RETURNS integer
+    INPUT x: integer
+    IF x > 0
+        RETURN x
+    END
+END
+
+SHOW maybeReturn(5)

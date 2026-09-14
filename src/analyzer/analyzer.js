@@ -33,6 +33,34 @@ function describeType(t) {
   return names[t] ?? `${article} ${t} value`;
 }
 
+// ADR-004 — recognized type-annotation names in v0.3 (no DATA yet, §15).
+const PRIMITIVE_TYPE_NAMES = new Set(["integer", "decimal", "text", "boolean", "list", "record"]);
+
+// ADR-004 — same widening rule as SET/CHANGE reassignment, applied to
+// parameter arguments and RETURN values instead of a variable rebinding.
+function isCompatibleWithDeclared(declaredType, actualType) {
+  if (declaredType === "unknown" || actualType === "unknown") return true;
+  if (declaredType === actualType) return true;
+  return declaredType === "decimal" && actualType === "integer";
+}
+
+// ADR-004 — conservative, sound "does this statement list definitely
+// return a value on every path" check. See docs/adr/ADR-004 for the exact
+// rules and why loops never count.
+function definitelyReturns(statements) {
+  return statements.some((stmt) => {
+    if (stmt.kind === "ReturnStatement") return true;
+    if (stmt.kind === "IfStatement") {
+      return (
+        stmt.elseBranch !== null &&
+        stmt.branches.every((b) => definitelyReturns(b.body)) &&
+        definitelyReturns(stmt.elseBranch)
+      );
+    }
+    return false;
+  });
+}
+
 export class Analyzer {
   constructor(program, hostGlobals = {}) {
     this.program = program;
@@ -45,8 +73,23 @@ export class Analyzer {
 
   analyze() {
     this.registerProcedures(this.program.statements);
-    this.checkStatements(this.program.statements, this.globalScope, { insideProcedure: false });
+    this.checkStatements(this.program.statements, this.globalScope, {
+      insideProcedure: false,
+      declaredReturnType: null,
+    });
     return this.program;
+  }
+
+  checkTypeName(typeName, span) {
+    if (typeName !== null && !PRIMITIVE_TYPE_NAMES.has(typeName)) {
+      err(
+        CODES.UNKNOWN_TYPE_NAME,
+        `"${typeName}" is not a recognized type name.`,
+        span,
+        `Recognized type names are: ${[...PRIMITIVE_TYPE_NAMES].join(", ")}.`,
+        "Check the spelling, or remove the annotation."
+      );
+    }
   }
 
   registerProcedures(statements) {
@@ -64,7 +107,14 @@ export class Analyzer {
             [[prev.node.name.span, "Previous definition"]]
           );
         }
-        this.procedures.set(name, { arity: stmt.parameters.length, node: stmt });
+        this.checkTypeName(stmt.returnType, stmt.name.span);
+        for (const param of stmt.parameters) this.checkTypeName(param.type, param.name.span);
+        this.procedures.set(name, {
+          arity: stmt.parameters.length,
+          node: stmt,
+          paramTypes: stmt.parameters.map((p) => p.type ?? "unknown"),
+          returnType: stmt.returnType,
+        });
       }
     }
   }
@@ -163,9 +213,22 @@ export class Analyzer {
         // lexical scope where DO happens to appear.
         const procScope = this.globalScope.child();
         for (const param of stmt.parameters) {
-          procScope.defineLocal(param.name, "unknown");
+          procScope.defineLocal(param.name.name, param.type ?? "unknown");
         }
-        this.checkStatements(stmt.body, procScope, { insideProcedure: true });
+        this.checkStatements(stmt.body, procScope, {
+          insideProcedure: true,
+          declaredReturnType: stmt.returnType,
+        });
+        // ADR-004 — a declared return type must be honored on every path.
+        if (stmt.returnType !== null && !definitelyReturns(stmt.body)) {
+          err(
+            CODES.NOT_ALL_PATHS_RETURN,
+            `"${stmt.name.name}" declares RETURNS ${stmt.returnType}, but does not return a value on every path.`,
+            stmt.name.span,
+            "Some path through this procedure can fall off the END without hitting a RETURN, which would silently produce NONE instead of the declared type.",
+            `Add a RETURN of type ${stmt.returnType} on every path (including a final ELSE, if the last statement is an IF).`
+          );
+        }
         return;
       }
 
@@ -179,7 +242,26 @@ export class Analyzer {
             "Move this into a procedure."
           );
         }
-        if (stmt.value) this.infer(stmt.value, scope);
+        const declaredReturnType = ctx.declaredReturnType ?? null;
+        const valueType = stmt.value ? this.infer(stmt.value, scope) : "none";
+        if (declaredReturnType !== null && !isCompatibleWithDeclared(declaredReturnType, valueType)) {
+          if (stmt.value === null) {
+            err(
+              CODES.RETURN_TYPE_MISMATCH,
+              `This procedure declares RETURNS ${declaredReturnType}, but this is a bare RETURN with no value.`,
+              stmt.span,
+              null,
+              `Return a value of type ${declaredReturnType}, e.g. RETURN ...`
+            );
+          }
+          err(
+            CODES.RETURN_TYPE_MISMATCH,
+            `This procedure declares RETURNS ${declaredReturnType}, but this RETURN gives ${describeType(valueType)}.`,
+            stmt.value.span,
+            null,
+            `Return a value of type ${declaredReturnType}, or change the procedure's RETURNS annotation.`
+          );
+        }
         return;
       }
 
@@ -313,8 +395,21 @@ export class Analyzer {
             [[proc.node.name.span, `"${name}" is declared here`]]
           );
         }
-        for (const arg of expr.arguments) this.infer(arg, scope);
-        return "unknown";
+        expr.arguments.forEach((arg, i) => {
+          const argType = this.infer(arg, scope);
+          const paramType = proc.paramTypes[i];
+          if (!isCompatibleWithDeclared(paramType, argType)) {
+            err(
+              CODES.ARGUMENT_TYPE_MISMATCH,
+              `"${name}" expects ${describeType(paramType)} for "${proc.node.parameters[i].name.name}", but this is ${describeType(argType)}.`,
+              arg.span,
+              null,
+              `Pass a value of type ${paramType}, or change the parameter's declared type.`,
+              [[proc.node.parameters[i].name.span, `"${proc.node.parameters[i].name.name}" is declared here`]]
+            );
+          }
+        });
+        return proc.returnType ?? "unknown";
       }
 
       default:

@@ -74,8 +74,11 @@ export class Interpreter {
   registerProcedures(statements) {
     for (const stmt of statements) {
       if (stmt.kind === "ProcedureDeclaration") {
+        // ADR-004 — parameters are {name: Identifier, type} now; the
+        // interpreter only ever needed the name (types are enforced
+        // statically by the analyzer, never re-checked at runtime, §13).
         this.procedures.set(stmt.name.name, {
-          params: stmt.parameters.map((p) => p.name),
+          params: stmt.parameters.map((p) => p.name.name),
           body: stmt.body,
         });
       }

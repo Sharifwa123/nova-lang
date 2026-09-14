@@ -493,24 +493,78 @@ Everything else in §1–§17 above is unchanged by v0.2.
 
 ---
 
-## What v0.3 and beyond were (per the original design chat)
+## v0.3 Amendments — Typed Procedures (ADR-004)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-004-typed-procedures.md](adr/ADR-004-typed-procedures.md) for
+full rationale.
+
+**§9 (amended)** — parameter and return type annotations, both optional:
+```
+input-declaration ::= "INPUT" identifier ( ":" type-name )?
+type-name          ::= identifier   # integer | decimal | text | boolean | list | record
+do-declaration     ::= "DO" identifier ( "RETURNS" type-name )? input-declaration* block "END"
+```
+New keyword: `RETURNS`. Type names are ordinary identifiers, validated
+against a fixed set (`E-SEM-016` if unrecognized) — no new keywords for the
+type names themselves.
+
+DECISION: fully backward compatible — omitting annotations keeps v0.1/v0.2
+behavior (`'unknown'`, fully permissive) exactly as before.
+
+DECISION: an annotated parameter's declared type is used for checks
+*inside* the procedure body (not just at call sites) — the analyzer's
+`infer()` for an `Identifier` naturally uses whatever type the parameter
+was bound to.
+
+DECISION: at a call site, each argument's inferred type must be compatible
+with the declared parameter type (same integer→decimal widening rule as
+`SET`/`CHANGE`, §4.1/§4.3) — mismatch is `E-SEM-015`.
+
+DECISION: when `RETURNS type` is declared, every `RETURN` in the body must
+give a compatible value (`E-SEM-013` if not, including a bare `RETURN`),
+and the body must **definitely return** on every path or it's
+`E-SEM-014`. "Definitely returns" is a deliberately conservative, sound
+check: a statement list definitely returns iff any statement in it does; a
+`RETURN` always does; an `IF` does only when it has an `ELSE` and every
+branch (all `ELSE IF`s plus the final `ELSE`) definitely returns; `FOR
+EACH`/`REPEAT` bodies **never** count, regardless of contents, because a
+loop can run zero times. See ADR-004 for the full rationale — this may
+reject some technically-safe procedures, but never accepts one that can
+silently fall through to `NONE`.
+
+DECISION: none of this is re-checked at runtime — per §13, a
+semantically-validated program is trusted completely by the interpreter.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-013 | RETURN value doesn't match the declared RETURNS type (or is a bare RETURN when one is declared) |
+| E-SEM-014 | Procedure declares RETURNS but doesn't return on every path |
+| E-SEM-015 | Call argument type doesn't match the declared parameter type |
+| E-SEM-016 | Unrecognized type name in an annotation |
+
+Everything else in §1–§17 and the v0.2 amendments above is unchanged.
+
+---
+
+## What v0.4 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.2 through v0.12, in this order, each with its own ADR:
+past v0.3 through v0.12, in this order, each with its own ADR:
 
-1. **v0.3** — typed procedures (parameter/return type annotations, checked
-   by the analyzer).
-2. **v0.4 (ADR-005)** — `DATA Name \n field: type \n END` named-type
+1. **v0.4 (ADR-005)** — `DATA Name \n field: type \n END` named-type
    declarations — a pure naming layer over the existing structural
    record/list machinery, zero new runtime concept.
-3. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
+2. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
    small standard library.
-4. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
+3. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
    verified against piped stdin through the real CLI.
-5. Error handling (`TRY`/catch-style), list indexing/mutation.
-6. **Static web UI** — a `PAGE` compiler target emitting HTML.
-7. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-8. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+4. Error handling (`TRY`/catch-style), list indexing/mutation.
+5. **Static web UI** — a `PAGE` compiler target emitting HTML.
+6. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+7. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

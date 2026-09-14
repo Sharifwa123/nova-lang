@@ -16,7 +16,7 @@ export const ACTIVE_KEYWORDS = new Set([
   "SET", "CHANGE", "SHOW", "IF", "ELSE", "END",
   "FOR", "EACH", "IN",
   "REPEAT", "TIMES",
-  "DO", "RETURN",
+  "DO", "RETURN", "RETURNS",
   "INPUT",
   "TRUE", "FALSE",
   "AND", "OR", "NOT",

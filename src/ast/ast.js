@@ -14,8 +14,10 @@ export const IfStatement = (branches, elseBranch, span) =>
 export const ForEachStatement = (loopVariable, iterable, body, span) =>
   node("ForEachStatement", { loopVariable, iterable, body }, span);
 export const RepeatStatement = (count, body, span) => node("RepeatStatement", { count, body }, span);
-export const ProcedureDeclaration = (name, parameters, body, span) =>
-  node("ProcedureDeclaration", { name, parameters, body }, span);
+// ADR-004 — `parameters` is [{ name: Identifier, type: string|null }];
+// `returnType` is string|null (an unannotated procedure has both null).
+export const ProcedureDeclaration = (name, parameters, returnType, body, span) =>
+  node("ProcedureDeclaration", { name, parameters, returnType, body }, span);
 export const ReturnStatement = (value, span) => node("ReturnStatement", { value }, span);
 export const ExpressionStatement = (expression, span) =>
   node("ExpressionStatement", { expression }, span);
