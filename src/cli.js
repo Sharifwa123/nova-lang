@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { runSource, compile } from "./nova.js";
+import { Interpreter } from "./interpreter/interpreter.js";
 import { compileProgram } from "./pagecompiler/compile.js";
 import { formatDiagnostic, NovaError } from "./diagnostics/diagnostic.js";
 
@@ -34,9 +35,12 @@ function runCommand(filePath) {
   }
 }
 
-// ADR-011 — `nova build`: compiles PAGE declarations only. The file's
-// ordinary imperative statements (if any) are never executed by `build`,
-// the same way `run` never touches PAGE content.
+// ADR-011/ADR-012 — `nova build`: runs the file's ordinary statements once,
+// silently (SHOW/ASK-prompt output suppressed - see the ADR for why this
+// isn't a special case, just a quiet run), so any SAVE calls populate the
+// store that data-bound PAGE content (FOR EACH...IN GET) reads from. Then
+// compiles PAGE declarations against that store. This is a static-site-
+// generator model: the HTML reflects data as of build time, nothing more.
 function buildCommand(filePath) {
   const source = readSourceOrExit(filePath);
   let program;
@@ -50,7 +54,18 @@ function buildCommand(filePath) {
     throw e;
   }
 
-  const outputs = compileProgram(program);
+  const interpreter = new Interpreter(program, {}, { write: () => {}, writePrompt: () => {} });
+  try {
+    interpreter.run();
+  } catch (e) {
+    if (e instanceof NovaError) {
+      console.error(formatDiagnostic(e.diagnostic, source, filePath));
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  const outputs = compileProgram(program, interpreter.store);
   if (outputs.length === 0) {
     console.log("No PAGE declarations found - nothing to build.");
     return;

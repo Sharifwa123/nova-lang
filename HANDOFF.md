@@ -108,15 +108,23 @@ dependency-light specifically to make that migration mechanical later.
   `{` not shaped like real interpolation (e.g. raw CSS) now lexes as
   literal text instead of erroring, in any string, not just `PAGE`'s. See
   `examples/website.nova`.
-- **198/198 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.11 (ADR-012) implemented**: data-bound `PAGE` — `FOR EACH product
+  IN GET Product ... END` inside a `PAGE`, rendered from real saved data.
+  `nova build` now actually runs the file once (silently) to populate the
+  store before compiling pages — a static-site-generator model, since no
+  server exists to make "live" data honest yet. Field access
+  (`product.name`) is checked against the real `DATA` shape. See
+  `examples/data_bound_website.nova`.
+- **210/210 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **38/38 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 16 valid programs that must run cleanly, 21
+- **41/41 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 17 valid programs that must run cleanly, 22
   invalid programs that must fail with the exact diagnostic code the spec
-  promises, plus a dedicated `nova build` check that writes and inspects
-  real HTML output files. This is deliberately the "actual CLI output"
-  level of verification, not just in-process test calls, matching the
-  discipline described in the original chat.
+  promises, plus two dedicated `nova build` checks (static and
+  data-bound) that write and inspect real HTML output files. This is
+  deliberately the "actual CLI output" level of verification, not just
+  in-process test calls, matching the discipline described in the
+  original chat.
 - Every diagnostic in SPECIFICATION.md §11's table is implemented and has
   at least one test or example exercising it.
 
@@ -124,7 +132,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js build examples/website.nova && cat examples/dist/index.html
+node src/cli.js build examples/data_bound_website.nova && cat examples/dist/catalog.html
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -150,11 +158,13 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   builtin yet (its result is always `text`).
 - `TRY`/`CATCH` catches runtime errors only, gives `text`-only error
   detail (no code/kind to match on), and has no re-throw yet.
-- `PAGE` content is literal-only (no variables/DATA-binding yet), has only
-  four elements (`TITLE`/`STYLE`/`HEADING`/`TEXT` — no headings levels,
-  layout containers, links, images, or lists), and there's no
-  interactivity (`BUTTON`/`WHEN`) or server (`API`/`SECURITY`) yet — those
-  are the next two milestones (see below).
+- `PAGE` has only four leaf elements (`TITLE`/`STYLE`/`HEADING`/`TEXT` —
+  no heading levels, layout containers, links, images, or lists) and one
+  data source (`FOR EACH...IN GET`, no `WHERE` filtering, no nested
+  `DATA` fields beyond one level deep in practice, though the grammar
+  doesn't forbid it). No interactivity (`BUTTON`/`WHEN`) or server
+  (`API`/`SECURITY`) yet — interactivity is the next, final planned
+  milestone (see below).
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
@@ -163,13 +173,7 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. **Data-bound `PAGE`** — reading `DATA`/`GET`-sourced values into page
-   content, the natural next step now that both `DATA`/persistence
-   (ADR-005/006) and static `PAGE` (ADR-011) exist. The real design
-   question: what does "data-bound" mean when `PAGE` is compiled once by
-   `nova build`, not re-run per request? (No server exists yet — that's
-   phase 3+ below.) Worth resolving explicitly, not assuming.
-2. **Interactive `PAGE`** — `BUTTON`/`WHEN clicked` compiled to
+1. **Interactive `PAGE`** — `BUTTON`/`WHEN clicked` compiled to
    restricted, sandboxed client-side JavaScript. This is the last item
    with any concrete detail surviving from the original chat (its very
    first message flagged "how does a PAGE safely call into backend logic
@@ -177,9 +181,14 @@ before implementation, per the process that's held so far):
    question) — specifically restrict `SAVE`/`GET`/`ASK`/arbitrary calls
    out of click handlers, and verify the restriction by actually trying to
    sneak one past the real CLI, not just by reading the generated code.
-3. From there: a minimal server/API pillar, durable storage, security
+   This is the **last originally-planned milestone** (v0.12 in the
+   original's own numbering) — completing it finishes the entire roadmap
+   this repository set out to recover and continue.
+2. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
-   explicitly multi-month-plus territory, not a next milestone.
+   explicitly multi-month-plus territory, not a next milestone, and with
+   no surviving detail from the original chat at all — genuinely new
+   ground past this point.
 
 The process discipline that held for 13 milestones in the original and is
 worth continuing: **ADR before implementation** for any real design
@@ -198,8 +207,9 @@ would catch immediately.
    the `CHANGE` keyword (002), list/record literals (003), typed
    procedures (004), `DATA` named types (005), persistence (006), the
    standard library (007), `ASK` input (008), list indexing/mutation
-   (009), error handling (010), the static PAGE compiler (011) — read
-   this last one in particular before touching PAGE further.
+   (009), error handling (010), the static PAGE compiler (011),
+   data-bound PAGE (012) — read the last two in particular before
+   touching PAGE further.
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

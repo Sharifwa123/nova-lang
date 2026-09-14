@@ -105,6 +105,35 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
   }
 }
 
+// ADR-012 — data-bound PAGE: `nova build` must actually run the script
+// (silently) to populate SAVE'd data before compiling FOR EACH...IN GET.
+{
+  const source = path.join(examplesDir, "data_bound_website.nova");
+  const distDir = path.join(examplesDir, "dist");
+  const result = runCli(source, undefined, "build");
+  let html = "";
+  try {
+    html = readFileSync(path.join(distDir, "catalog.html"), "utf8");
+  } catch {
+    // leave blank; checked below
+  }
+  const ok =
+    result.status === 0 &&
+    result.stdout.trim() !== "" && // "Wrote ..." lines only - no SHOW output leaked through
+    !result.stdout.includes("This only prints with") &&
+    html.includes("<h1>Widget</h1>") &&
+    html.includes("<p>9.99</p>") &&
+    html.includes("<h1>Gizmo</h1>");
+  if (ok) {
+    console.log(`  OK   data_bound_website.nova -> dist/catalog.html (data-bound, build-time SAVE populated it)`);
+    passed++;
+  } else {
+    console.log(`  FAIL data_bound_website.nova build (exit ${result.status})`);
+    console.log(indent(result.stderr || result.stdout));
+    failed++;
+  }
+}
+
 function indent(s) {
   return (s ?? "").split("\n").map((l) => "    " + l).join("\n");
 }

@@ -1,0 +1,36 @@
+# v0.11 (ADR-012): data-bound PAGE. `nova build` runs this file's
+# ordinary statements once, silently, to populate the SAVE'd data, then
+# compiles PAGE content against it - a static-site-generator model (the
+# HTML reflects data as of build time; there's no server yet to make it
+# genuinely live). Try:
+#   node src/cli.js build examples/data_bound_website.nova
+#   cat examples/dist/catalog.html
+
+DATA Product
+    name: text
+    price: decimal
+END
+
+DO makeProduct RETURNS Product
+    INPUT n: text
+    INPUT p: decimal
+
+    RETURN { name: n, price: p }
+END
+
+SAVE makeProduct("Widget", 9.99)
+SAVE makeProduct("Gadget", 19.99)
+SAVE makeProduct("Gizmo", 4.50)
+
+PAGE "/catalog"
+    TITLE "Catalog"
+    STYLE "body { font-family: sans-serif; margin: 3em auto; max-width: 40em; }"
+    HEADING "Our Products"
+    FOR EACH product IN GET Product
+        HEADING product.name
+        TEXT product.price
+    END
+    TEXT "End of catalog."
+END
+
+SHOW "This only prints with `nova run`, never `nova build`."

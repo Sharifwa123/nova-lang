@@ -932,13 +932,64 @@ Everything else in §1–§17 and the v0.2–v0.9 amendments above is unchanged.
 
 ---
 
-## What v0.11 and beyond were (per the original design chat)
+## v0.11 Amendments — Data-Bound PAGE (ADR-012)
 
-The original chat session (see the raw transcript reference above) continued
-past v0.10 through v0.12, in this order, each with its own ADR:
+Status: Implemented (this repository). See
+[docs/adr/ADR-012-data-bound-pages.md](adr/ADR-012-data-bound-pages.md)
+for full rationale. **Provenance note**: only the roadmap line survived;
+design is this repository's own.
 
-1. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-2. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+**§ADR-011 grammar (amended)** — `page-element` gains a recursive
+`FOR EACH` variant:
+```
+page-element ::= ("TITLE"|"STYLE"|"HEADING"|"TEXT") page-content
+               | "FOR" "EACH" identifier "IN" "GET" identifier NEWLINE page-element* "END"
+page-content  ::= literal | loop-variable ("." identifier)+
+```
+No new keywords — `FOR`/`EACH`/`IN` (§6.5) and `GET` (ADR-006) are reused
+with exactly their existing meaning, the same move ADR-009 made reusing
+`CHANGE` for indexed mutation.
+
+DECISION: `nova build` now works like a conventional **static site
+generator** — it runs the file's ordinary statements once, **silently**
+(`SHOW`/`ASK`-prompt output suppressed; an `ASK` call still blocks on real
+input exactly as `nova run` would, not special-cased), letting `SAVE`
+calls (ADR-006) populate the store, and only then compiles `PAGE`
+content. The output reflects data as of build time — nothing is
+"live"; there is no server yet to make that claim honest.
+
+DECISION: inside a `PAGE`-level `FOR EACH`, content may be a literal (as
+before, ADR-011) **or** a field-access chain rooted at the loop variable
+(`product.name`) — nothing else. The field is checked against the real
+`DATA` shape, reusing the exact static-field-checking machinery ordinary
+`.field` access already has (ADR-005) — an unknown field is `E-SEM-021`,
+an unknown `DATA` type in `GET` is `E-SEM-023`, both reused directly, not
+duplicated.
+
+DECISION: `TITLE`/`STYLE` remain top-level-only (`E-SEM-032` inside a
+`FOR EACH` — repeating a title or stylesheet per record has no meaning);
+`HEADING`/`TEXT` may nest at any depth and render in the loop body's
+written order, once per fetched record, in save order (`GET`'s existing
+oldest-first order, ADR-006) — an empty collection renders nothing, not
+an error.
+
+New diagnostic:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-032 | TITLE or STYLE used inside a PAGE-level FOR EACH |
+
+Everything else in §1–§17 and the v0.2–v0.10 amendments above is
+unchanged.
+
+---
+
+## What v0.12 and beyond were (per the original design chat)
+
+The original chat session (see the raw transcript reference above) is the
+source for this final planned milestone:
+
+1. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

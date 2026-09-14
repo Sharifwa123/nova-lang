@@ -29,7 +29,8 @@ node src/cli.js run examples/stdlib.nova
 printf "Ada\n7\n" | node src/cli.js run examples/ask.nova
 node src/cli.js run examples/list_indexing.nova
 node src/cli.js run examples/error_handling.nova
-node src/cli.js build examples/website.nova   # writes examples/dist/*.html
+node src/cli.js build examples/website.nova              # static PAGE
+node src/cli.js build examples/data_bound_website.nova   # data-bound PAGE
 ```
 
 ```nova

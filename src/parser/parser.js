@@ -413,8 +413,9 @@ export class Parser {
     );
   }
 
-  // ADR-011 — page-declaration ::= "PAGE" string-literal NEWLINE page-element* "END"
-  //           page-element      ::= ("TITLE"|"STYLE"|"HEADING"|"TEXT") expression
+  // ADR-011/ADR-012 — page-declaration ::= "PAGE" string-literal NEWLINE page-element* "END"
+  //           page-element ::= ("TITLE"|"STYLE"|"HEADING"|"TEXT") expression
+  //                          | "FOR" "EACH" identifier "IN" "GET" identifier NEWLINE page-element* "END"
   parsePage() {
     const pageTok = this.expectKeyword("PAGE");
     const routeTok = this.current();
@@ -438,26 +439,63 @@ export class Parser {
     }
     const route = routeTok.value.map((p) => p.value).join("");
     this.advance();
-    const elements = [];
-    this.skipNewlines();
-    const elementKeywords = ["TITLE", "STYLE", "HEADING", "TEXT"];
-    while (!this.checkKeyword("END")) {
-      if (this.atEOF()) this.unclosedBlockError(pageTok, "PAGE block");
-      const tok = this.current();
-      if (tok.type !== TokenType.KEYWORD || !elementKeywords.includes(tok.value)) {
-        this.error(
-          CODES.UNEXPECTED_TOKEN,
-          `Expected TITLE, STYLE, HEADING, or TEXT, but found ${this.describeToken(tok)}.`,
-          tok
-        );
-      }
-      this.advance();
-      const value = this.parseExpression();
-      elements.push({ kind: tok.value, value, span: spanOf(tok.span, value.span) });
-      this.skipNewlines();
-    }
+    const { elements, stoppedAt } = this.parsePageElementList();
+    if (stoppedAt === "EOF") this.unclosedBlockError(pageTok, "PAGE block");
     const end = this.expectKeyword("END");
     return AST.PageDeclaration(route, routeTok.span, elements, spanOf(pageTok.span, end.span));
+  }
+
+  // Shared by the top of a PAGE and by a nested FOR EACH's body.
+  parsePageElementList() {
+    const elements = [];
+    this.skipNewlines();
+    const leafKeywords = ["TITLE", "STYLE", "HEADING", "TEXT"];
+    while (!this.checkKeyword("END")) {
+      if (this.atEOF()) return { elements, stoppedAt: "EOF" };
+      if (this.checkKeyword("FOR")) {
+        elements.push(this.parsePageForEach());
+      } else {
+        const tok = this.current();
+        if (tok.type !== TokenType.KEYWORD || !leafKeywords.includes(tok.value)) {
+          this.error(
+            CODES.UNEXPECTED_TOKEN,
+            `Expected TITLE, STYLE, HEADING, TEXT, or FOR EACH, but found ${this.describeToken(tok)}.`,
+            tok
+          );
+        }
+        this.advance();
+        const value = this.parseExpression();
+        elements.push({ kind: tok.value, value, span: spanOf(tok.span, value.span) });
+      }
+      this.skipNewlines();
+    }
+    return { elements, stoppedAt: "END" };
+  }
+
+  // ADR-012 — reuses FOR EACH / GET rather than inventing a parallel
+  // "page loop" construct; the iterable is restricted to "GET <DataType>"
+  // since that's the only build-time-known data source PAGE has.
+  parsePageForEach() {
+    const forTok = this.expectKeyword("FOR");
+    this.expectKeyword("EACH");
+    const loopVar = this.expectIdentifier("a loop variable name");
+    this.expectKeyword("IN");
+    this.expectKeyword(
+      "GET",
+      "Inside PAGE, FOR EACH must iterate GET <DataType> - that's the only data PAGE can see at build time."
+    );
+    const typeTok = this.expectIdentifier("a DATA type name");
+    const { elements: body, stoppedAt } = this.parsePageElementList();
+    if (stoppedAt === "EOF") this.unclosedBlockError(forTok, "FOR EACH block inside PAGE");
+    const end = this.expectKeyword("END");
+    return {
+      kind: "FOR_EACH",
+      loopVar: AST.Identifier(loopVar.value, loopVar.span),
+      dataTypeName: typeTok.value,
+      dataTypeNameSpan: typeTok.span,
+      body,
+      span: spanOf(forTok.span, end.span),
+    };
   }
 
   // ADR-006 — delete-statement ::= "DELETE" identifier expression

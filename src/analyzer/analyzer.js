@@ -273,10 +273,10 @@ export class Analyzer {
     }
   }
 
-  // ADR-011 — route validation, uniqueness, and the "content must be a
-  // static literal" restriction all happen here, up front, since PAGE
-  // content is never executed (there is no later pass that would catch
-  // these the way ordinary statement execution would).
+  // ADR-011 — route validation and uniqueness happen here, in phase 1,
+  // since they don't depend on DATA field resolution. Element validation
+  // (ADR-012) needs DATA fields already resolved (staticFieldType), so it
+  // waits for phase 2 - see resolveTopLevelTypes.
   registerPage(stmt) {
     if (!stmt.route.startsWith("/")) {
       err(
@@ -298,18 +298,47 @@ export class Analyzer {
       );
     }
     this.pages.set(stmt.route, stmt);
+  }
 
+  // ADR-012 — recursive: a PAGE-level FOR EACH nests more page-elements.
+  // `loopVarStack` is every enclosing FOR EACH's { name, dataTypeName },
+  // outermost first, so a body can reference any of them (like ordinary
+  // lexical scoping) - and their fields are checked against the real DATA
+  // shape (reusing staticFieldType, the same machinery ordinary .field
+  // access already uses).
+  validatePageElements(elements, loopVarStack, topLevel) {
     let sawTitle = false;
-    for (const el of stmt.elements) {
-      if (!isStaticLiteral(el.value)) {
+    for (const el of elements) {
+      if (el.kind === "FOR_EACH") {
+        if (!this.dataTypes.has(el.dataTypeName)) {
+          err(
+            CODES.UNKNOWN_DATA_TYPE_IN_GET,
+            `"${el.dataTypeName}" is not a DATA type.`,
+            el.dataTypeNameSpan,
+            null,
+            `Declare it first with DATA ${el.dataTypeName} ... END, or check the spelling.`
+          );
+        }
+        this.validatePageElements(
+          el.body,
+          [...loopVarStack, { name: el.loopVar.name, dataTypeName: el.dataTypeName }],
+          false
+        );
+        continue;
+      }
+
+      if ((el.kind === "TITLE" || el.kind === "STYLE") && !topLevel) {
         err(
-          CODES.PAGE_CONTENT_NOT_STATIC,
-          `${el.kind} requires a plain literal value (this PAGE is static) — not a variable, call, or interpolated string.`,
-          el.value.span,
-          "PAGE content is compiled, not run, so there is no variable state for anything but a literal to resolve against yet (a later milestone adds data-bound PAGE content).",
+          CODES.PAGE_TITLE_STYLE_NOT_TOP_LEVEL,
+          `${el.kind} must be at the top level of a PAGE, not inside FOR EACH.`,
+          el.span,
+          `${el.kind === "TITLE" ? "A title" : "A stylesheet"} repeated once per record has no meaning.`,
           null
         );
       }
+
+      this.checkPageContent(el.value, loopVarStack);
+
       if (el.kind === "STYLE" && staticLiteralType(el.value) !== "text") {
         err(
           CODES.PAGE_STYLE_NOT_TEXT,
@@ -319,15 +348,47 @@ export class Analyzer {
       }
       if (el.kind === "TITLE") {
         if (sawTitle) {
-          err(
-            CODES.UNEXPECTED_TOKEN,
-            "A PAGE can have at most one TITLE.",
-            el.span
-          );
+          err(CODES.UNEXPECTED_TOKEN, "A PAGE can have at most one TITLE.", el.span);
         }
         sawTitle = true;
       }
     }
+  }
+
+  // ADR-012 — a page-element's value is valid iff it's a plain literal, or
+  // a field-access chain rooted at an enclosing FOR EACH's loop variable
+  // (checked against that DATA type's real fields via staticFieldType).
+  checkPageContent(expr, loopVarStack) {
+    if (isStaticLiteral(expr)) return;
+
+    if (expr.kind === "FieldAccess") {
+      const fields = [];
+      let root = expr;
+      while (root.kind === "FieldAccess") {
+        fields.unshift(root.field);
+        root = root.target;
+      }
+      if (root.kind === "Identifier") {
+        const frame = loopVarStack.find((f) => f.name === root.name);
+        if (frame) {
+          let currentType = frame.dataTypeName;
+          for (const field of fields) currentType = this.staticFieldType(currentType, field, expr.span);
+          return;
+        }
+      }
+    }
+
+    const loopVarHint =
+      loopVarStack.length > 0
+        ? ` or a field of ${loopVarStack.map((f) => `"${f.name}"`).join("/")} (the current FOR EACH loop variable)`
+        : "";
+    err(
+      CODES.PAGE_CONTENT_NOT_STATIC,
+      `This requires a plain literal value${loopVarHint} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
+      expr.span,
+      "PAGE content is compiled, not run, so there is no variable state for anything else to resolve against.",
+      null
+    );
   }
 
   // Phase 2 — every DATA/procedure name is now known, so field and
@@ -360,6 +421,12 @@ export class Analyzer {
       for (const param of proc.node.parameters) this.checkTypeName(param.type, param.name.span);
       proc.paramTypes = proc.node.parameters.map((p) => p.type ?? "unknown");
       proc.returnType = proc.node.returnType;
+    }
+    // ADR-012 — PAGE element validation (field access against real DATA
+    // shapes) needs the DATA fields just resolved above, so it happens
+    // last in phase 2, not during phase 1's registerPage.
+    for (const [, page] of this.pages) {
+      this.validatePageElements(page.elements, [], true);
     }
   }
 

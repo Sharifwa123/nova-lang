@@ -1,0 +1,10 @@
+# expect: E-SEM-032
+DATA Product
+    name: text
+END
+
+PAGE "/"
+    FOR EACH product IN GET Product
+        TITLE product.name
+    END
+END
