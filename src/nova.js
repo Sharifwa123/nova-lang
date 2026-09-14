@@ -19,10 +19,13 @@ export function compile(source, filename = "<source>", hostGlobals = {}) {
   return program;
 }
 
-// Compiles and runs `source`. `write` receives one string per SHOW.
-export function runSource(source, filename = "<source>", hostGlobals = {}, { write } = {}) {
+// Compiles and runs `source`. `options` are passed straight through to the
+// Interpreter: `write` receives one string per SHOW, `writePrompt` receives
+// an ASK prompt (no trailing newline), `input` is a canned list of lines
+// for ASK (omit to read real stdin, on demand - see ADR-008).
+export function runSource(source, filename = "<source>", hostGlobals = {}, options = {}) {
   const program = compile(source, filename, hostGlobals);
-  const interpreter = new Interpreter(program, hostGlobals, write ? { write } : {});
+  const interpreter = new Interpreter(program, hostGlobals, options);
   interpreter.run();
   return interpreter;
 }

@@ -566,6 +566,12 @@ export class Parser {
       const typeTok = this.expectIdentifier("a DATA type name");
       return AST.GetExpression(typeTok.value, typeTok.span, spanOf(tok.span, typeTok.span));
     }
+    // ADR-008 — ask-expression ::= "ASK" expression
+    if (tok.type === TokenType.KEYWORD && tok.value === "ASK") {
+      this.advance();
+      const prompt = this.parseExpression();
+      return AST.AskExpression(prompt, spanOf(tok.span, prompt.span));
+    }
     if (tok.type === TokenType.IDENTIFIER) {
       this.advance();
       let node = AST.Identifier(tok.value, tok.span);

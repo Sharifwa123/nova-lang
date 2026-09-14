@@ -657,6 +657,11 @@ export class Analyzer {
         return "list";
       }
 
+      case "AskExpression": {
+        this.infer(expr.prompt, scope); // any type is fine, display()-ed like SHOW
+        return "text";
+      }
+
       default:
         throw new Error(`Analyzer: unhandled expression kind '${expr.kind}'`);
     }

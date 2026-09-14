@@ -81,10 +81,18 @@ dependency-light specifically to make that migration mechanical later.
   syntax as a user `DO` procedure, sharing its namespace (redefining one is
   a duplicate-procedure error, not silent shadowing). See
   `examples/stdlib.nova`.
-- **139/139 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.7 (ADR-008) implemented**: `ASK "prompt"` for real, synchronous,
+  lazily-read stdin input (`SET name = ASK "Name? "`). A program that
+  never calls `ASK` never touches stdin — see
+  `src/interpreter/stdin.js`. Verified two ways, matching the original's
+  own approach: canned input queues in unit tests, and real piped stdin
+  through the CLI (`test/run-examples.js` now supports an optional
+  `<example>.stdin` companion file; see `examples/ask.nova` +
+  `examples/ask.stdin`).
+- **148/148 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **29/29 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 12 valid programs that must run cleanly, 17
+- **31/31 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 13 valid programs that must run cleanly, 18
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -96,7 +104,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/stdlib.nova
+printf "Ada\n7\n" | node src/cli.js run examples/ask.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -117,7 +125,8 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   only construction syntax.
 - Persistence is in-memory only (no file/durable backing yet) and has no
   `WHERE`-style filtering — `GET` always returns everything of a type.
-- Stdlib is six procedures (ADR-007); no `ASK`/`TRY`/`PAGE`/`API`/
+- Stdlib is six procedures (ADR-007). `ASK` has no text-to-number parsing
+  builtin yet (its result is always `text`). No `TRY`/`PAGE`/`API`/
   `SECURITY` yet — still reserved at the keyword/token level, no grammar.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
@@ -127,17 +136,14 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
-   — verify with real piped stdin through the CLI, not just canned test
-   input, since it's genuinely new I/O code.
-2. Error handling, list indexing/mutation.
-3. A `PAGE` compiler target (static HTML first, then data-bound, then
+1. Error handling, list indexing/mutation.
+2. A `PAGE` compiler target (static HTML first, then data-bound, then
    `BUTTON`/`WHEN clicked` compiled to restricted, sandboxed client-side
    JavaScript — the original's ADR-013 is worth re-deriving carefully: it
    specifically restricted `SAVE`/`GET`/`ASK`/arbitrary calls out of click
    handlers, and verified the restriction by trying to sneak one past the
    real CLI, not just by reading the code).
-4. From there: a minimal server/API pillar, durable storage, security
+3. From there: a minimal server/API pillar, durable storage, security
    basics, mobile/desktop targets, native compilation/self-hosting — all
    explicitly multi-month-plus territory, not a next milestone.
 
@@ -157,7 +163,7 @@ would catch immediately.
 3. The ADRs in [docs/adr/](docs/adr/), in order: block delimiters (001),
    the `CHANGE` keyword (002), list/record literals (003), typed
    procedures (004), `DATA` named types (005), persistence (006), the
-   standard library (007).
+   standard library (007), `ASK` input (008).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

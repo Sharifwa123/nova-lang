@@ -10,6 +10,7 @@ import {
 import { Diagnostic, NovaError } from "../diagnostics/diagnostic.js";
 import { CODES } from "../diagnostics/codes.js";
 import { BUILTINS } from "../stdlib/builtins.js";
+import { readLineSync } from "./stdin.js";
 
 // Runtime environment — mirrors analyzer/scope.js's Scope one-for-one so
 // CHANGE resolves identically at analysis time and run time (ADR-002).
@@ -57,7 +58,15 @@ function numericResult(l, r, fn) {
 }
 
 export class Interpreter {
-  constructor(program, hostGlobals = {}, { write = (s) => process.stdout.write(s + "\n") } = {}) {
+  constructor(
+    program,
+    hostGlobals = {},
+    {
+      write = (s) => process.stdout.write(s + "\n"),
+      writePrompt = (s) => process.stdout.write(s),
+      input = null, // ADR-008 — canned lines for tests; null means "read real stdin"
+    } = {}
+  ) {
     this.program = program;
     this.globalEnv = new Environment();
     for (const [name, value] of Object.entries(hostGlobals)) {
@@ -66,6 +75,16 @@ export class Interpreter {
     this.procedures = new Map(); // name -> { params: [string], body: Block } | { params, native: fn }
     this.store = new Map(); // ADR-006 — DATA type name -> { nextId, records: Map<id, value> }
     this.write = write;
+    this.writePrompt = writePrompt;
+    // ADR-008 — lazy, on-demand: this only ever runs when ASK actually
+    // executes, never eagerly, so a program that never calls ASK never
+    // touches stdin at all.
+    if (input) {
+      let i = 0;
+      this.nextLine = () => (i < input.length ? input[i++] : null);
+    } else {
+      this.nextLine = readLineSync;
+    }
     // ADR-007 — built-ins share the same procedure table user DO
     // declarations populate; registerProcedures (run per `run()`) adds
     // user procedures on top of these without clearing them.
@@ -286,6 +305,20 @@ export class Interpreter {
       case "GetExpression": {
         const collection = this.getCollection(expr.typeName);
         return makeList([...collection.records.values()]);
+      }
+
+      case "AskExpression": {
+        const prompt = this.evaluate(expr.prompt, env);
+        this.writePrompt(display(prompt)); // no trailing newline - the answer continues the line
+        const line = this.nextLine();
+        if (line === null) {
+          runtimeError(
+            CODES.ASK_NO_INPUT,
+            "ASK expected input, but none was available (input has ended).",
+            expr.span
+          );
+        }
+        return makeText(line);
       }
 
       default:

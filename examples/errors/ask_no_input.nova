@@ -1,0 +1,5 @@
+# expect: E-RUN-004
+# Piped with no stdin at all (see ask_no_input.stdin), so ASK has nothing
+# to read.
+SET name = ASK "Name? "
+SHOW name

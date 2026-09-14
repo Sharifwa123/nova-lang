@@ -15,15 +15,27 @@ const cli = path.join(root, "src", "cli.js");
 let passed = 0;
 let failed = 0;
 
-function runCli(file) {
-  return spawnSync(process.execPath, [cli, "run", file], { encoding: "utf8" });
+function runCli(file, stdinInput) {
+  const opts = { encoding: "utf8" };
+  if (stdinInput !== undefined) opts.input = stdinInput;
+  return spawnSync(process.execPath, [cli, "run", file], opts);
 }
 
 console.log("== Valid examples (expect exit 0) ==");
 const validFiles = readdirSync(examplesDir).filter((f) => f.endsWith(".nova"));
 for (const f of validFiles) {
   const full = path.join(examplesDir, f);
-  const result = runCli(full);
+  // ADR-008 — a companion `<name>.stdin` file, if present, is piped in as
+  // real stdin (not the in-process canned-input path test/v0.7-ask.test.js
+  // exercises) — matching the original chat's own dual verification.
+  const stdinPath = full.replace(/\.nova$/, ".stdin");
+  let stdinInput;
+  try {
+    stdinInput = readFileSync(stdinPath, "utf8");
+  } catch {
+    stdinInput = undefined;
+  }
+  const result = runCli(full, stdinInput);
   if (result.status === 0) {
     console.log(`  OK   ${f}`);
     passed++;
@@ -42,7 +54,13 @@ for (const f of errorFiles) {
   const source = readFileSync(full, "utf8");
   const expectedMatch = source.match(/# expect:\s*(\S+)/);
   const expectedCode = expectedMatch ? expectedMatch[1] : null;
-  const result = runCli(full);
+  let stdinInput;
+  try {
+    stdinInput = readFileSync(full.replace(/\.nova$/, ".stdin"), "utf8");
+  } catch {
+    stdinInput = undefined;
+  }
+  const result = runCli(full, stdinInput);
   const gotCode = (result.stderr.match(/\[([A-Z0-9-]+)\]/) || [])[1];
   if (result.status === 1 && gotCode === expectedCode) {
     console.log(`  OK   ${f} -> ${gotCode}`);

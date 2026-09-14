@@ -50,3 +50,6 @@ export const GetExpression = (typeName, typeNameSpan, span) =>
   node("GetExpression", { typeName, typeNameSpan }, span);
 export const DeleteStatement = (typeName, typeNameSpan, idExpression, span) =>
   node("DeleteStatement", { typeName, typeNameSpan, idExpression }, span);
+
+// ADR-008
+export const AskExpression = (prompt, span) => node("AskExpression", { prompt }, span);

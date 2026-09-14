@@ -726,17 +726,56 @@ Everything else in §1–§17 and the v0.2–v0.5 amendments above is unchanged.
 
 ---
 
-## What v0.7 and beyond were (per the original design chat)
+## v0.7 Amendments — ASK: Real Input (ADR-008)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-008-ask-input.md](adr/ADR-008-ask-input.md) for full
+rationale. **Provenance note**: this is the last milestone whose exact
+syntax and keyword survived directly in the original chat's own summary
+text — `SET name = ASK "prompt "`, verified via canned input queues *and*
+real piped stdin (`printf ... | nova run ...`), both reproduced here.
+
+**New grammar**: `ask-expression ::= "ASK" expression`. New keyword `ASK`.
+
+DECISION: `ASK <expr>` writes `expr`'s `display()` form as a prompt with
+**no trailing newline**, then blocks reading one real line of input,
+returned as `text`. `ASK`'s static type is always `text` — there is still
+no `text`→number parsing builtin (DEFERRED), so using an `ASK` result
+arithmetically without one fails with the ordinary `E-SEM-004` operator
+type error, same as any other text-plus-number mistake.
+
+DECISION: input is read **lazily, on demand** — never eagerly at program
+start. A program that never calls `ASK` never touches stdin at all; this
+is what keeps every example and test written before this milestone
+unaffected. Implemented as a small zero-dependency synchronous line reader
+(`src/interpreter/stdin.js`) over `fs.readSync(0, ...)`, not a "slurp all
+of stdin up front" shortcut.
+
+DECISION: `ASK` called after input is exhausted is a runtime error
+(`E-RUN-004`), not a silently-returned empty string or `NONE` — an empty
+string needs to stay distinguishable from "no more input," matching how
+every other runtime-only condition in NOVA (`E-RUN-001`, `E-RUN-002`) gets
+a loud diagnostic instead of a quiet fallback.
+
+New diagnostic:
+
+| Code | Meaning |
+|---|---|
+| E-RUN-004 | ASK called with no input left (stdin exhausted) |
+
+Everything else in §1–§17 and the v0.2–v0.6 amendments above is unchanged.
+
+---
+
+## What v0.8 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.6 through v0.12, in this order, each with its own ADR:
+past v0.7 through v0.12, in this order, each with its own ADR:
 
-1. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
-   verified against piped stdin through the real CLI.
-2. Error handling (`TRY`/catch-style), list indexing/mutation.
-3. **Static web UI** — a `PAGE` compiler target emitting HTML.
-4. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-5. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+1. Error handling (`TRY`/catch-style), list indexing/mutation.
+2. **Static web UI** — a `PAGE` compiler target emitting HTML.
+3. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+4. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.
