@@ -1,0 +1,32 @@
+# v0.5 (ADR-006): SAVE / GET / DELETE - in-memory persistence, one
+# collection per DATA type. SAVE needs a value whose specific DATA type is
+# statically known, so a bare record literal is routed through a typed
+# procedure first (see the ADR for why).
+
+DATA Product
+    name: text
+    price: decimal
+END
+
+DO makeProduct RETURNS Product
+    INPUT n: text
+    INPUT pr: decimal
+
+    RETURN { name: n, price: pr }
+END
+
+SET id1 = SAVE makeProduct("Widget", 9.99)
+SET id2 = SAVE makeProduct("Gadget", 19.99)
+SAVE makeProduct("Gizmo", 4.50)
+
+SHOW "Catalog:"
+FOR EACH product IN GET Product
+    SHOW "{product.name}: {product.price}"
+END
+
+DELETE Product id2
+
+SHOW "After removing id {id2}:"
+FOR EACH product IN GET Product
+    SHOW "{product.name}: {product.price}"
+END

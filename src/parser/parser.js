@@ -193,6 +193,7 @@ export class Parser {
         case "DO": return this.parseDo();
         case "RETURN": return this.parseReturn();
         case "DATA": return this.parseData();
+        case "DELETE": return this.parseDelete();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -201,13 +202,13 @@ export class Parser {
             "Every END must match an earlier block-opening keyword (IF, FOR EACH, REPEAT, DO). No such keyword is open at this point.",
             "Remove this END, or check whether an earlier block was closed too early."
           );
-        default:
-          this.error(
-            CODES.UNEXPECTED_TOKEN,
-            `'${tok.value}' cannot start a statement here.`,
-            tok
-          );
       }
+      // Any other keyword either starts a valid expression (TRUE, FALSE,
+      // NOT, SAVE, GET) — handled by falling through to
+      // parseExpressionStatement below — or it doesn't, in which case
+      // parseAtom's own "Expected an expression, but found X" error covers
+      // it with an equally clear diagnostic. No need to keep a second,
+      // separate list of "keywords that can start a statement" in sync.
     }
     return this.parseExpressionStatement();
   }
@@ -378,6 +379,14 @@ export class Parser {
     return AST.DataDeclaration(AST.Identifier(name.value, name.span), fields, spanOf(dataTok.span, end.span));
   }
 
+  // ADR-006 — delete-statement ::= "DELETE" identifier expression
+  parseDelete() {
+    const deleteTok = this.expectKeyword("DELETE");
+    const typeTok = this.expectIdentifier("a DATA type name");
+    const idExpression = this.parseExpression();
+    return AST.DeleteStatement(typeTok.value, typeTok.span, idExpression, spanOf(deleteTok.span, idExpression.span));
+  }
+
   parseReturn() {
     const start = this.expectKeyword("RETURN");
     // A bare RETURN is followed by NEWLINE/END/EOF; anything else starts an expression.
@@ -544,6 +553,18 @@ export class Parser {
     }
     if (tok.type === TokenType.PUNCTUATION && tok.value === "{") {
       return this.parseRecordLiteral(tok);
+    }
+    // ADR-006 — save-expression ::= "SAVE" expression
+    if (tok.type === TokenType.KEYWORD && tok.value === "SAVE") {
+      this.advance();
+      const value = this.parseExpression();
+      return AST.SaveExpression(value, spanOf(tok.span, value.span));
+    }
+    // ADR-006 — get-expression ::= "GET" identifier
+    if (tok.type === TokenType.KEYWORD && tok.value === "GET") {
+      this.advance();
+      const typeTok = this.expectIdentifier("a DATA type name");
+      return AST.GetExpression(typeTok.value, typeTok.span, spanOf(tok.span, typeTok.span));
     }
     if (tok.type === TokenType.IDENTIFIER) {
       this.advance();

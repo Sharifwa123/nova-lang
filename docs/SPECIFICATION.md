@@ -618,13 +618,76 @@ Everything else in §1–§17 and the v0.2/v0.3 amendments above is unchanged.
 
 ---
 
-## What v0.5 and beyond were (per the original design chat)
+## v0.5 Amendments — Persistence: SAVE / GET / DELETE (ADR-006)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-006-persistence.md](adr/ADR-006-persistence.md) for full
+rationale. **Provenance note**: unlike v0.1–v0.4, the original chat's exact
+syntax for this milestone did not survive verbatim — this design is this
+repository's own, using the `SAVE`/`GET`/`DELETE` keywords the original
+reserved for exactly this purpose, in the same ADR-first discipline.
+
+**§2.6 (amended)** — `SAVE`, `GET`, `DELETE` move from forward-reserved
+into real grammar.
+
+**New grammar**:
+```
+save-expression  ::= "SAVE" expression
+get-expression    ::= "GET" identifier
+delete-statement  ::= "DELETE" identifier expression
+```
+`SAVE`/`GET` are expression-level (usable anywhere an expression is valid,
+e.g. `SET id = SAVE ...`, `FOR EACH p IN GET Product`); `DELETE` is a
+statement.
+
+DECISION: one in-memory collection per `DATA` type, alive only for the
+current process (no durability — a later milestone). `SAVE <expr>`
+requires `expr`'s *specific* `DATA` type to be statically known — plain
+`'record'` and even `'unknown'` are rejected (`E-SEM-022`), a deliberate
+exception to NOVA's usual unknown-is-permissive rule, since the target
+collection has no runtime fallback to derive it from. `SAVE` returns a
+fresh per-type `integer` id (starting at 1) and is the only way to obtain
+one — the id is bookkeeping the *store* keeps, not a field injected into
+the record's own shape (`DATA`'s exact-shape guarantee, ADR-005, is
+preserved).
+
+DECISION: `GET TypeName` returns every currently-saved record of that
+type, oldest first, as a `list` — no `id` attached, no filtering yet
+(`E-SEM-023` if `TypeName` isn't a known `DATA` type). `WHERE`-style
+filtering is explicitly deferred, same as the original roadmap's own note.
+
+DECISION: `DELETE TypeName idExpr` is **idempotent** — removing an id
+that's already gone is a silent no-op, not an error (`E-SEM-024` for an
+unknown type, `E-SEM-025` if the id expression isn't an integer).
+
+Consequence worth calling out: because `SAVE` needs a *specific* static
+`DATA` type and a bare record literal only gets one when checked against an
+expected type (ADR-005), `SAVE { ... }` directly on a literal doesn't
+type-check — the literal has to pass through a typed `INPUT` or `RETURNS`
+position first (see `examples/persistence.nova`). This is the direct,
+foreseeable consequence of ADR-005's own deferred "no named-constructor
+syntax" item meeting persistence's need for an unambiguous target.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-022 | SAVE's operand isn't a value of a specific, known DATA type |
+| E-SEM-023 | GET names a type that isn't a declared DATA type |
+| E-SEM-024 | DELETE names a type that isn't a declared DATA type |
+| E-SEM-025 | DELETE's id expression isn't an integer |
+
+Everything else in §1–§17 and the v0.2/v0.3/v0.4 amendments above is
+unchanged.
+
+---
+
+## What v0.6 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.4 through v0.12, in this order, each with its own ADR:
+past v0.5 through v0.12, in this order, each with its own ADR:
 
-1. **v0.5–v0.6** — persistence (`SAVE`/`GET`/`DELETE`, in-memory only) and a
-   small standard library.
+1. A small standard library.
 2. **v0.7 (ADR-008)** — `ASK "prompt"` for real synchronous stdin input,
    verified against piped stdin through the real CLI.
 3. Error handling (`TRY`/catch-style), list indexing/mutation.

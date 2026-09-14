@@ -41,3 +41,12 @@ export const CallExpression = (callee, args, span) =>
 // ADR-003 — `fields` is an array of { name: string, value: Expression, nameSpan }.
 export const ListLiteral = (elements, span) => node("ListLiteral", { elements }, span);
 export const RecordLiteral = (fields, span) => node("RecordLiteral", { fields }, span);
+
+// ADR-006 — `dataTypeName` on SaveExpression is set by the analyzer (not
+// the parser): the resolved DATA type to save into, read by the
+// interpreter instead of re-deriving it at runtime.
+export const SaveExpression = (value, span) => node("SaveExpression", { value, dataTypeName: null }, span);
+export const GetExpression = (typeName, typeNameSpan, span) =>
+  node("GetExpression", { typeName, typeNameSpan }, span);
+export const DeleteStatement = (typeName, typeNameSpan, idExpression, span) =>
+  node("DeleteStatement", { typeName, typeNameSpan, idExpression }, span);

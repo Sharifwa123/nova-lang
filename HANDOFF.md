@@ -70,10 +70,16 @@ dependency-light specifically to make that migration mechanical later.
   type get exact field checking; `.field` access on a known `DATA`-typed
   value is checked statically and precisely typed instead of staying
   `'unknown'` — see `examples/data_types.nova`.
-- **114/114 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.5 (ADR-006) implemented**: in-memory persistence — `SAVE`/`GET`/
+  `DELETE`, one collection per `DATA` type, integer ids. **Note**: unlike
+  v0.1–v0.4, the original chat's exact syntax for this milestone didn't
+  survive verbatim — this is this repo's own design (same ADR-first
+  discipline, the same three reserved keywords) — see
+  `examples/persistence.nova`.
+- **127/127 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **25/25 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 10 valid programs that must run cleanly, 15
+- **27/27 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 11 valid programs that must run cleanly, 16
   invalid programs that must fail with the exact diagnostic code the spec
   promises. This is deliberately the "actual `nova run` output" level of
   verification, not just in-process test calls, matching the discipline
@@ -85,7 +91,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js run examples/data_types.nova
+node src/cli.js run examples/persistence.nova
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -104,8 +110,10 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 - No named-constructor syntax for `DATA` types (`Product { ... }`) — a bare
   `{ ... }` record literal, checked against the expected type, is still the
   only construction syntax.
-- No persistence, no stdlib, no `PAGE`/`API`/`SECURITY` — all still
-  reserved at the keyword/token level but carry no grammar yet.
+- Persistence is in-memory only (no file/durable backing yet) and has no
+  `WHERE`-style filtering — `GET` always returns everything of a type.
+- No stdlib, no `PAGE`/`API`/`SECURITY` — all still reserved at the
+  keyword/token level but carry no grammar yet.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
@@ -114,9 +122,9 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 The original chat's own roadmap, in order (each deserves its own ADR
 before implementation, per the process that's held so far):
 
-1. Persistence (`SAVE`/`GET`/`DELETE`, in-memory first) and a small stdlib.
-   `DATA` types are the natural shape for persisted records now that both
-   exist.
+1. A small standard library (string/number helper procedures — the
+   original bundled this with persistence as "v0.5-v0.6"; this repo split
+   them into separate milestones/ADRs, one real capability at a time).
 2. `ASK "prompt"` for real synchronous stdin input (the original's ADR-008)
    — verify with real piped stdin through the CLI, not just canned test
    input, since it's genuinely new I/O code.
@@ -146,7 +154,7 @@ would catch immediately.
 2. [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — the binding spec.
 3. The ADRs in [docs/adr/](docs/adr/), in order: block delimiters (001),
    the `CHANGE` keyword (002), list/record literals (003), typed
-   procedures (004), `DATA` named types (005).
+   procedures (004), `DATA` named types (005), persistence (006).
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

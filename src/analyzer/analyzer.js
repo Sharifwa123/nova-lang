@@ -411,6 +411,29 @@ export class Analyzer {
         // nothing left to check when the main traversal reaches it.
         return;
 
+      case "DeleteStatement": {
+        if (!this.dataTypes.has(stmt.typeName)) {
+          err(
+            CODES.UNKNOWN_DATA_TYPE_IN_DELETE,
+            `"${stmt.typeName}" is not a DATA type.`,
+            stmt.typeNameSpan,
+            null,
+            `Declare it first with DATA ${stmt.typeName} ... END, or check the spelling.`
+          );
+        }
+        const idType = this.infer(stmt.idExpression, scope);
+        if (idType !== "integer" && idType !== "unknown") {
+          err(
+            CODES.DELETE_ID_NOT_INTEGER,
+            `DELETE requires an integer id, but this is ${describeType(idType)}.`,
+            stmt.idExpression.span,
+            "SAVE returns the integer id to use here.",
+            null
+          );
+        }
+        return;
+      }
+
       default:
         throw new Error(`Analyzer: unhandled statement kind '${stmt.kind}'`);
     }
@@ -570,6 +593,37 @@ export class Analyzer {
           }
         });
         return proc.returnType ?? "unknown";
+      }
+
+      case "SaveExpression": {
+        // ADR-006 — unlike everywhere else in NOVA, 'unknown' is NOT
+        // permissively accepted here: the target collection is derived
+        // entirely from the static type, and there is no runtime fallback.
+        const valueType = this.infer(expr.value, scope);
+        if (!this.dataTypes.has(valueType)) {
+          err(
+            CODES.SAVE_REQUIRES_DATA_TYPE,
+            `SAVE requires a value whose specific DATA type is known, but this is ${describeType(valueType)}.`,
+            expr.value.span,
+            "SAVE needs to know which DATA type's collection to save into, which NOVA can only determine from a value that came from a typed INPUT parameter or a typed RETURNS procedure result - a plain, untyped record literal doesn't carry that information by itself.",
+            "Pass this through a procedure with a RETURNS <DataType> annotation first, or an INPUT of that type."
+          );
+        }
+        expr.dataTypeName = valueType; // read by the interpreter at run time
+        return "integer";
+      }
+
+      case "GetExpression": {
+        if (!this.dataTypes.has(expr.typeName)) {
+          err(
+            CODES.UNKNOWN_DATA_TYPE_IN_GET,
+            `"${expr.typeName}" is not a DATA type.`,
+            expr.typeNameSpan,
+            null,
+            `Declare it first with DATA ${expr.typeName} ... END, or check the spelling.`
+          );
+        }
+        return "list";
       }
 
       default:

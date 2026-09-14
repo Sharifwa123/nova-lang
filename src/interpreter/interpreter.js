@@ -63,7 +63,16 @@ export class Interpreter {
       this.globalEnv.defineLocal(name, value);
     }
     this.procedures = new Map(); // name -> { params: [string], body: Block }
+    this.store = new Map(); // ADR-006 — DATA type name -> { nextId, records: Map<id, value> }
     this.write = write;
+  }
+
+  // ADR-006 — every DATA type gets its collection lazily, on first use.
+  getCollection(typeName) {
+    if (!this.store.has(typeName)) {
+      this.store.set(typeName, { nextId: 1, records: new Map() });
+    }
+    return this.store.get(typeName);
   }
 
   run() {
@@ -167,6 +176,12 @@ export class Interpreter {
       case "ExpressionStatement":
         this.evaluate(stmt.expression, env);
         return;
+      case "DeleteStatement": {
+        const collection = this.getCollection(stmt.typeName);
+        const id = this.evaluate(stmt.idExpression, env);
+        collection.records.delete(id.value); // idempotent no-op if absent (ADR-006)
+        return;
+      }
       default:
         throw new Error(`Interpreter: unhandled statement kind '${stmt.kind}'`);
     }
@@ -250,6 +265,19 @@ export class Interpreter {
         const fields = {};
         for (const f of expr.fields) fields[f.name] = this.evaluate(f.value, env); // left-to-right
         return makeRecord(fields);
+      }
+
+      case "SaveExpression": {
+        const value = this.evaluate(expr.value, env);
+        const collection = this.getCollection(expr.dataTypeName); // set by the analyzer
+        const id = collection.nextId++;
+        collection.records.set(id, value);
+        return makeInt(id);
+      }
+
+      case "GetExpression": {
+        const collection = this.getCollection(expr.typeName);
+        return makeList([...collection.records.values()]);
       }
 
       default:

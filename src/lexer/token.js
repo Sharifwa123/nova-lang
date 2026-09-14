@@ -19,6 +19,7 @@ export const ACTIVE_KEYWORDS = new Set([
   "DO", "RETURN", "RETURNS",
   "INPUT",
   "DATA",
+  "SAVE", "GET", "DELETE",
   "TRUE", "FALSE",
   "AND", "OR", "NOT",
 ]);
@@ -27,7 +28,7 @@ export const ACTIVE_KEYWORDS = new Set([
 // identifiers, protecting NOVA's future extension points.
 export const RESERVED_KEYWORDS = new Set([
   "PAGE", "SCREEN", "API", "SERVICE", "SECURITY", "WHEN",
-  "USE", "GO", "TO", "CREATE", "GET", "SAVE", "DELETE", "STYLE",
+  "USE", "GO", "TO", "CREATE", "STYLE",
 ]);
 
 export const ALL_KEYWORDS = new Set([...ACTIVE_KEYWORDS, ...RESERVED_KEYWORDS]);
