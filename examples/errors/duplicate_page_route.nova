@@ -1,0 +1,7 @@
+# expect: E-SEM-028
+PAGE "/"
+    TITLE "a"
+END
+PAGE "/"
+    TITLE "b"
+END

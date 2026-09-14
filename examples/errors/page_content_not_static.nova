@@ -1,0 +1,5 @@
+# expect: E-SEM-030
+SET name = "World"
+PAGE "/"
+    TEXT name
+END

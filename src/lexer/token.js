@@ -11,7 +11,8 @@ export const TokenType = Object.freeze({
   EOF: "EOF",
 });
 
-// §2.6 — keywords with real grammar (CHANGE: ADR-002, DATA: ADR-005).
+// §2.6 — keywords with real grammar (CHANGE: ADR-002, DATA: ADR-005,
+// PAGE/STYLE/TITLE/HEADING/TEXT: ADR-011).
 export const ACTIVE_KEYWORDS = new Set([
   "SET", "CHANGE", "SHOW", "IF", "ELSE", "END",
   "FOR", "EACH", "IN",
@@ -21,6 +22,7 @@ export const ACTIVE_KEYWORDS = new Set([
   "DATA",
   "SAVE", "GET", "DELETE", "ASK",
   "TRY", "CATCH",
+  "PAGE", "STYLE", "TITLE", "HEADING", "TEXT",
   "TRUE", "FALSE",
   "AND", "OR", "NOT",
 ]);
@@ -28,8 +30,8 @@ export const ACTIVE_KEYWORDS = new Set([
 // §2.6 — forward-reserved keywords: no grammar yet, but cannot be used as
 // identifiers, protecting NOVA's future extension points.
 export const RESERVED_KEYWORDS = new Set([
-  "PAGE", "SCREEN", "API", "SERVICE", "SECURITY", "WHEN",
-  "USE", "GO", "TO", "CREATE", "STYLE",
+  "SCREEN", "API", "SERVICE", "SECURITY", "WHEN",
+  "USE", "GO", "TO", "CREATE",
 ]);
 
 export const ALL_KEYWORDS = new Set([...ACTIVE_KEYWORDS, ...RESERVED_KEYWORDS]);

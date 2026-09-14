@@ -1,0 +1,21 @@
+# v0.10 (ADR-011): PAGE compiles to static HTML - it is inert during
+# `nova run` (try both commands on this same file):
+#   node src/cli.js run examples/website.nova     -> only the SHOW below runs
+#   node src/cli.js build examples/website.nova    -> writes dist/index.html
+#                                                      and dist/about.html
+
+PAGE "/"
+    TITLE "NOVA"
+    STYLE "body { font-family: sans-serif; margin: 3em auto; max-width: 40em; }"
+    HEADING "Welcome to NOVA"
+    TEXT "This page was compiled from a .nova file - not interpreted."
+    TEXT "PAGE content in v0.10 is static: literals only, no variables yet."
+END
+
+PAGE "/about"
+    TITLE "About"
+    HEADING "About This Project"
+    TEXT "NOVA is a language that reads like natural instructions."
+END
+
+SHOW "This only prints with `nova run`, never `nova build`."

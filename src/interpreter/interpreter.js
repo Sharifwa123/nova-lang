@@ -210,6 +210,8 @@ export class Interpreter {
         return; // already registered by registerProcedures
       case "DataDeclaration":
         return; // ADR-005 — no runtime representation; a pure naming layer over `record`
+      case "PageDeclaration":
+        return; // ADR-011 — inert during `nova run`; compiled by `nova build` instead
       case "ReturnStatement": {
         const v = stmt.value ? this.evaluate(stmt.value, env) : NONE;
         throw new ReturnSignal(v);

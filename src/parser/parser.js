@@ -195,6 +195,7 @@ export class Parser {
         case "DATA": return this.parseData();
         case "DELETE": return this.parseDelete();
         case "TRY": return this.parseTry();
+        case "PAGE": return this.parsePage();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -410,6 +411,53 @@ export class Parser {
       catchBlock.statements,
       spanOf(tryTok.span, end.span)
     );
+  }
+
+  // ADR-011 — page-declaration ::= "PAGE" string-literal NEWLINE page-element* "END"
+  //           page-element      ::= ("TITLE"|"STYLE"|"HEADING"|"TEXT") expression
+  parsePage() {
+    const pageTok = this.expectKeyword("PAGE");
+    const routeTok = this.current();
+    if (routeTok.type !== TokenType.STRING) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected a route (a string literal), but found ${this.describeToken(routeTok)}.`,
+        routeTok,
+        null,
+        'PAGE must be followed by a route string, e.g. PAGE "/" or PAGE "/about".'
+      );
+    }
+    if (routeTok.value.some((p) => p.kind === "interp")) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        "A PAGE route cannot contain interpolation.",
+        routeTok,
+        null,
+        'Use a plain string, e.g. PAGE "/about".'
+      );
+    }
+    const route = routeTok.value.map((p) => p.value).join("");
+    this.advance();
+    const elements = [];
+    this.skipNewlines();
+    const elementKeywords = ["TITLE", "STYLE", "HEADING", "TEXT"];
+    while (!this.checkKeyword("END")) {
+      if (this.atEOF()) this.unclosedBlockError(pageTok, "PAGE block");
+      const tok = this.current();
+      if (tok.type !== TokenType.KEYWORD || !elementKeywords.includes(tok.value)) {
+        this.error(
+          CODES.UNEXPECTED_TOKEN,
+          `Expected TITLE, STYLE, HEADING, or TEXT, but found ${this.describeToken(tok)}.`,
+          tok
+        );
+      }
+      this.advance();
+      const value = this.parseExpression();
+      elements.push({ kind: tok.value, value, span: spanOf(tok.span, value.span) });
+      this.skipNewlines();
+    }
+    const end = this.expectKeyword("END");
+    return AST.PageDeclaration(route, routeTok.span, elements, spanOf(pageTok.span, end.span));
   }
 
   // ADR-006 — delete-statement ::= "DELETE" identifier expression

@@ -864,14 +864,81 @@ Everything else in §1–§17 and the v0.2–v0.8 amendments above is unchanged.
 
 ---
 
-## What v0.10 and beyond were (per the original design chat)
+## v0.10 Amendments — PAGE: a Static HTML Compiler (ADR-011)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-011-static-page-compiler.md](adr/ADR-011-static-page-compiler.md)
+for full rationale. **Provenance note**: this is the first milestone with
+genuine invention rather than reconstruction — only the roadmap's
+three-step split (static → data-bound → interactive UI), the reserved
+keywords `PAGE`/`STYLE`, and one confirmed detail (a `PAGE` block
+containing `STYLE` and `BUTTON` and `WHEN`) survived from the original
+chat's very first message, which also named this exact area *"the single
+hardest architectural problem in this whole spec."*
+
+**§2.6 (amended)** — `PAGE`, `STYLE` move from forward-reserved into real
+grammar. New keywords: `TITLE`, `HEADING`, `TEXT`.
+
+**New top-level declaration**:
+```
+page-declaration ::= "PAGE" string-literal NEWLINE page-element* "END"
+page-element      ::= ("TITLE" | "STYLE" | "HEADING" | "TEXT") expression
+```
+
+DECISION: `PAGE` is a declaration, not code — inert during `nova run`,
+exactly like `DATA`/`DO`. A **new command**, `nova build <file>.nova`,
+reads `PAGE` declarations and writes HTML files to `dist/` next to the
+source (`nova build` never executes the file's ordinary statements, the
+mirror image of `nova run` never touching `PAGE` content). One `.nova`
+file can hold both a runnable script and page content side by side.
+
+DECISION: every `page-element`'s value must be a **literal** (no
+identifiers, calls, or interpolated strings) — `PAGE` is compiled, never
+executed, so there is no running program state for anything else to
+resolve against (`E-SEM-030`). Data-bound content is explicitly the next
+milestone's job, not a partial answer squeezed into this one.
+
+DECISION: `TITLE` (at most one, `<title>`), `STYLE` (any number, raw CSS
+text — must be `text`, `E-SEM-031` — concatenated into one `<style>`
+block), `HEADING` (`<h1>`), `TEXT` (`<p>`, may repeat, renders in
+declaration order interleaved with `HEADING`). Text content is
+HTML-escaped; `STYLE` content is not (it isn't HTML text). No heading
+levels, layout containers, links, images, or lists yet (DEFERRED — this is
+"enough to render a genuine page," not a layout system).
+
+DECISION: a `PAGE`'s string literal is its route, and must start with `/`
+(`E-SEM-029`); routes must be unique within a file (`E-SEM-028`). `nova
+build` maps a route straight to a file path — `/` → `dist/index.html`,
+`/about` → `dist/about.html`, `/products/list` →
+`dist/products/list.html` — no routing configuration to learn.
+
+**Lexer fix picked up along the way**: a `{` inside any string literal
+that isn't immediately followed by a valid `identifier(.identifier)*}`
+path is now literal text, not a lexical error — needed for raw CSS in
+`STYLE` (`"body { color: red; }"` previously failed to lex, in *any*
+string, since v0.1), implemented as a backtracking lookahead in the string
+scanner. Genuine `{name}`/`{a.b}` interpolation is completely unaffected.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-028 | Duplicate PAGE route within one file |
+| E-SEM-029 | PAGE route missing its leading `/` |
+| E-SEM-030 | Non-literal PAGE content (PAGE is never executed) |
+| E-SEM-031 | STYLE given a non-text value |
+
+Everything else in §1–§17 and the v0.2–v0.9 amendments above is unchanged.
+
+---
+
+## What v0.11 and beyond were (per the original design chat)
 
 The original chat session (see the raw transcript reference above) continued
-past v0.9 through v0.12, in this order, each with its own ADR:
+past v0.10 through v0.12, in this order, each with its own ADR:
 
-1. **Static web UI** — a `PAGE` compiler target emitting HTML.
-2. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
-3. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
+1. **Data-bound web UI** — `PAGE` reading `DATA`/`GET`-sourced values.
+2. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
    client-side JavaScript (state mutation restricted to prevent
    `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
    executing the generated `<script>` in Node against a DOM stub.

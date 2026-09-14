@@ -15,10 +15,10 @@ const cli = path.join(root, "src", "cli.js");
 let passed = 0;
 let failed = 0;
 
-function runCli(file, stdinInput) {
+function runCli(file, stdinInput, command = "run") {
   const opts = { encoding: "utf8" };
   if (stdinInput !== undefined) opts.input = stdinInput;
-  return spawnSync(process.execPath, [cli, "run", file], opts);
+  return spawnSync(process.execPath, [cli, command, file], opts);
 }
 
 console.log("== Valid examples (expect exit 0) ==");
@@ -67,6 +67,39 @@ for (const f of errorFiles) {
     passed++;
   } else {
     console.log(`  FAIL ${f} (expected ${expectedCode}, got ${gotCode ?? "no diagnostic"}, exit ${result.status})`);
+    console.log(indent(result.stderr || result.stdout));
+    failed++;
+  }
+}
+
+// ADR-011 — `nova run` never exercises the PAGE compiler at all (PAGE is
+// inert there), so examples/website.nova is separately verified through
+// `nova build`, checking the real files it writes to dist/ - the same
+// "actual CLI output, not just in-process" standard as everything else.
+console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) ==");
+{
+  const source = path.join(examplesDir, "website.nova");
+  const distDir = path.join(examplesDir, "dist");
+  const result = runCli(source, undefined, "build");
+  const indexPath = path.join(distDir, "index.html");
+  const aboutPath = path.join(distDir, "about.html");
+  let indexHtml = "", aboutHtml = "";
+  try {
+    indexHtml = readFileSync(indexPath, "utf8");
+    aboutHtml = readFileSync(aboutPath, "utf8");
+  } catch {
+    // leave blank; checked below
+  }
+  const ok =
+    result.status === 0 &&
+    indexHtml.includes("<title>NOVA</title>") &&
+    indexHtml.includes("<h1>Welcome to NOVA</h1>") &&
+    aboutHtml.includes("<title>About</title>");
+  if (ok) {
+    console.log(`  OK   website.nova -> dist/index.html, dist/about.html`);
+    passed++;
+  } else {
+    console.log(`  FAIL website.nova build (exit ${result.status})`);
     console.log(indent(result.stderr || result.stdout));
     failed++;
   }

@@ -33,6 +33,11 @@ export const DataDeclaration = (name, fields, span) =>
 export const TryStatement = (tryBody, errorVar, catchBody, span) =>
   node("TryStatement", { tryBody, errorVar, catchBody }, span);
 
+// ADR-011 — `elements` is [{ kind: 'TITLE'|'STYLE'|'HEADING'|'TEXT',
+// value: Expression, span }]. `route` is the raw string (e.g. "/about").
+export const PageDeclaration = (route, routeSpan, elements, span) =>
+  node("PageDeclaration", { route, routeSpan, elements }, span);
+
 export const IntegerLiteral = (value, span) => node("IntegerLiteral", { value }, span);
 export const DecimalLiteral = (value, span) => node("DecimalLiteral", { value }, span);
 export const StringLiteral = (parts, span) => node("StringLiteral", { parts }, span);

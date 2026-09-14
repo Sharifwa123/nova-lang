@@ -34,6 +34,25 @@ test("lexer: string with interpolation and dotted path", () => {
   ]);
 });
 
+test("lexer (ADR-011 fix): a brace not shaped like interpolation is literal text", () => {
+  const tokens = new Lexer('"body { color: red; }"').tokenize();
+  assertEqual(tokens[0].value, [{ kind: "text", value: "body { color: red; }" }]);
+});
+
+test("lexer (ADR-011 fix): a bare unmatched { is literal text too", () => {
+  const tokens = new Lexer('"a { b"').tokenize();
+  assertEqual(tokens[0].value, [{ kind: "text", value: "a { b" }]);
+});
+
+test("lexer (ADR-011 fix): real interpolation is unaffected by the fix", () => {
+  const tokens = new Lexer('"Hello {name}!"').tokenize();
+  assertEqual(tokens[0].value, [
+    { kind: "text", value: "Hello " },
+    { kind: "interp", path: ["name"], span: tokens[0].value[1].span },
+    { kind: "text", value: "!" },
+  ]);
+});
+
 test("lexer: escapes", () => {
   const tokens = new Lexer('"a\\nb\\tc\\"d\\\\e"').tokenize();
   assertEqual(tokens[0].value, [{ kind: "text", value: 'a\nb\tc"d\\e' }]);

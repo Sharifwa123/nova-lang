@@ -19,6 +19,23 @@ function describeType(t) {
   return names[t] ?? `${article} ${t} value`;
 }
 
+// ADR-011 — PAGE content must be a literal: no identifiers, calls, or
+// interpolated strings, since PAGE is compiled, never executed.
+function isStaticLiteral(expr) {
+  if (expr.kind === "StringLiteral") return expr.parts.every((p) => p.kind === "text");
+  return expr.kind === "IntegerLiteral" || expr.kind === "DecimalLiteral" || expr.kind === "BooleanLiteral";
+}
+
+function staticLiteralType(expr) {
+  switch (expr.kind) {
+    case "IntegerLiteral": return "integer";
+    case "DecimalLiteral": return "decimal";
+    case "BooleanLiteral": return "boolean";
+    case "StringLiteral": return "text";
+    default: return "unknown";
+  }
+}
+
 // ADR-004/ADR-005 — recognized primitive type-annotation names. DATA names
 // (checked separately, since they're user-declared) extend this set.
 const PRIMITIVE_TYPE_NAMES = new Set(["integer", "decimal", "text", "boolean", "list", "record"]);
@@ -52,6 +69,7 @@ export class Analyzer {
     this.program = program;
     this.procedures = new Map(); // name -> { arity, node, paramTypes, returnType }
     this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
+    this.pages = new Map(); // ADR-011 — route -> PageDeclaration node
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
       this.globalScope.defineLocal(name, type);
@@ -249,6 +267,65 @@ export class Analyzer {
           );
         }
         this.dataTypes.set(name, { node: stmt, fields: null });
+      } else if (stmt.kind === "PageDeclaration") {
+        this.registerPage(stmt);
+      }
+    }
+  }
+
+  // ADR-011 — route validation, uniqueness, and the "content must be a
+  // static literal" restriction all happen here, up front, since PAGE
+  // content is never executed (there is no later pass that would catch
+  // these the way ordinary statement execution would).
+  registerPage(stmt) {
+    if (!stmt.route.startsWith("/")) {
+      err(
+        CODES.INVALID_PAGE_ROUTE,
+        `A PAGE route must start with "/", but got "${stmt.route}".`,
+        stmt.routeSpan,
+        null,
+        `Use "/${stmt.route}" or similar.`
+      );
+    }
+    if (this.pages.has(stmt.route)) {
+      err(
+        CODES.DUPLICATE_PAGE_ROUTE,
+        `The route "${stmt.route}" is already used by another PAGE.`,
+        stmt.routeSpan,
+        "Each PAGE must have a unique route.",
+        "Use a different route.",
+        [[this.pages.get(stmt.route).routeSpan, "Previous PAGE with this route"]]
+      );
+    }
+    this.pages.set(stmt.route, stmt);
+
+    let sawTitle = false;
+    for (const el of stmt.elements) {
+      if (!isStaticLiteral(el.value)) {
+        err(
+          CODES.PAGE_CONTENT_NOT_STATIC,
+          `${el.kind} requires a plain literal value (this PAGE is static) — not a variable, call, or interpolated string.`,
+          el.value.span,
+          "PAGE content is compiled, not run, so there is no variable state for anything but a literal to resolve against yet (a later milestone adds data-bound PAGE content).",
+          null
+        );
+      }
+      if (el.kind === "STYLE" && staticLiteralType(el.value) !== "text") {
+        err(
+          CODES.PAGE_STYLE_NOT_TEXT,
+          `STYLE requires text (raw CSS), but this is ${describeType(staticLiteralType(el.value))}.`,
+          el.value.span
+        );
+      }
+      if (el.kind === "TITLE") {
+        if (sawTitle) {
+          err(
+            CODES.UNEXPECTED_TOKEN,
+            "A PAGE can have at most one TITLE.",
+            el.span
+          );
+        }
+        sawTitle = true;
       }
     }
   }
@@ -476,6 +553,11 @@ export class Analyzer {
       case "DataDeclaration":
         // Already fully validated in resolveTopLevelTypes (phase 2) -
         // nothing left to check when the main traversal reaches it.
+        return;
+
+      case "PageDeclaration":
+        // Already fully validated in registerPage (phase 1) - PAGE is
+        // inert during `nova run`, exactly like DATA (ADR-011).
         return;
 
       case "TryStatement": {

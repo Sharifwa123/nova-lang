@@ -220,7 +220,13 @@ export class Lexer {
         continue;
       }
       if (ch === "{") {
+        // A `{` only starts interpolation when it's immediately followed
+        // by a real identifier(.identifier)* path and a closing `}` — a
+        // `{` that doesn't fit that shape (e.g. raw CSS in a PAGE STYLE
+        // element, ADR-011) is just literal text, not an error. This is a
+        // backtracking lookahead: attempt the parse, roll back on failure.
         const interpStart = this.here();
+        const savedPos = this.pos, savedLine = this.line, savedColumn = this.column;
         this.advance();
         let ident = "";
         while (!this.atEnd() && isIdentContinue(this.peek())) ident += this.advance();
@@ -231,15 +237,12 @@ export class Lexer {
           while (!this.atEnd() && isIdentContinue(this.peek())) field += this.advance();
           path.push(field);
         }
-        if (this.peek() !== "}") {
-          this.error(
-            CODES.UNEXPECTED_CHARACTER,
-            "Expected '}' to close this interpolation.",
-            interpStart,
-            this.here(),
-            "NOVA string interpolation supports only {identifier} or {identifier.field}, not full expressions (§2.7.2).",
-            'Close the interpolation with "}", e.g. "{name}".'
-          );
+        if (ident === "" || this.peek() !== "}") {
+          this.pos = savedPos;
+          this.line = savedLine;
+          this.column = savedColumn;
+          textBuf += this.advance(); // the literal '{'
+          continue;
         }
         this.advance(); // '}'
         flushText();
