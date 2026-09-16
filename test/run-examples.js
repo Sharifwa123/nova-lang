@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, "..");
@@ -129,6 +130,58 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
     passed++;
   } else {
     console.log(`  FAIL data_bound_website.nova build (exit ${result.status})`);
+    console.log(indent(result.stderr || result.stdout));
+    failed++;
+  }
+}
+
+// ADR-013 — interactive PAGE: real CLI build, then EXECUTE the generated
+// <script> against a DOM stub and call the button functions
+// programmatically, exactly the original chat's own verification
+// approach - a string match on the HTML cannot catch a codegen bug
+// (wrong operator, render() never called); actually running it can.
+{
+  const source = path.join(examplesDir, "interactive_counter.nova");
+  const distDir = path.join(examplesDir, "dist");
+  const result = runCli(source, undefined, "build");
+  let html = "";
+  try {
+    html = readFileSync(path.join(distDir, "counter.html"), "utf8");
+  } catch {
+    // leave blank; checked below
+  }
+  let chainOk = false;
+  try {
+    const scriptSrc = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+    const elements = new Map();
+    for (const m of html.matchAll(/id="(nova-el-\d+)"/g)) {
+      if (!elements.has(m[1])) {
+        elements.set(m[1], {
+          _text: "",
+          set textContent(v) { this._text = v; },
+          get textContent() { return this._text; },
+        });
+      }
+    }
+    const sandbox = { document: { getElementById: (id) => elements.get(id) } };
+    vm.createContext(sandbox);
+    vm.runInContext(scriptSrc, sandbox);
+    const el = elements.get("nova-el-0");
+    sandbox.novaClick_0(); // +1
+    sandbox.novaClick_0(); // +1
+    sandbox.novaClick_1(); // -1
+    chainOk = sandbox.state.count === 1 && el.textContent === "1";
+    sandbox.novaClick_2(); // Reset
+    chainOk = chainOk && sandbox.state.count === 0 && el.textContent === "0";
+  } catch {
+    chainOk = false;
+  }
+  const ok = result.status === 0 && chainOk;
+  if (ok) {
+    console.log(`  OK   interactive_counter.nova -> dist/counter.html (generated JS executed, click chain verified)`);
+    passed++;
+  } else {
+    console.log(`  FAIL interactive_counter.nova build/execute (exit ${result.status})`);
     console.log(indent(result.stderr || result.stdout));
     failed++;
   }

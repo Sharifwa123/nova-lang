@@ -454,12 +454,16 @@ export class Parser {
       if (this.atEOF()) return { elements, stoppedAt: "EOF" };
       if (this.checkKeyword("FOR")) {
         elements.push(this.parsePageForEach());
+      } else if (this.checkKeyword("SET")) {
+        elements.push(this.parsePageState());
+      } else if (this.checkKeyword("BUTTON")) {
+        elements.push(this.parsePageButton());
       } else {
         const tok = this.current();
         if (tok.type !== TokenType.KEYWORD || !leafKeywords.includes(tok.value)) {
           this.error(
             CODES.UNEXPECTED_TOKEN,
-            `Expected TITLE, STYLE, HEADING, TEXT, or FOR EACH, but found ${this.describeToken(tok)}.`,
+            `Expected TITLE, STYLE, HEADING, TEXT, FOR EACH, SET, or BUTTON, but found ${this.describeToken(tok)}.`,
             tok
           );
         }
@@ -470,6 +474,40 @@ export class Parser {
       this.skipNewlines();
     }
     return { elements, stoppedAt: "END" };
+  }
+
+  // ADR-013 — page-local state: SET <name> = <literal>, reusing the exact
+  // "SET declares" meaning ordinary variables already have (ADR-002).
+  parsePageState() {
+    const setTok = this.expectKeyword("SET");
+    const name = this.expectIdentifier("a state variable name");
+    this.expectOperator("=");
+    const value = this.parseExpression();
+    return {
+      kind: "SET",
+      name: AST.Identifier(name.value, name.span),
+      value,
+      span: spanOf(setTok.span, value.span),
+    };
+  }
+
+  // ADR-013 — button-element ::= "BUTTON" expression NEWLINE
+  //                               "WHEN" "CLICKED" block "END" NEWLINE "END"
+  // WHEN CLICKED's body is parsed as an ORDINARY statement block (any
+  // statement is syntactically valid here) - restricting it to safe
+  // CHANGE-only actions is a semantic check, not a parser one (ADR-013).
+  parsePageButton() {
+    const buttonTok = this.expectKeyword("BUTTON");
+    const label = this.parseExpression();
+    this.skipNewlines();
+    this.expectKeyword("WHEN");
+    this.expectKeyword("CLICKED");
+    const whenBlock = this.parseBlockUntil(["END"]);
+    if (whenBlock.stoppedAt === "EOF") this.unclosedBlockError(buttonTok, "BUTTON's WHEN CLICKED block");
+    this.expectKeyword("END"); // closes WHEN CLICKED
+    this.skipNewlines(); // the fix for the original's own missing-newline-skip bug (ADR-013)
+    const end = this.expectKeyword("END"); // closes BUTTON
+    return { kind: "BUTTON", label, actions: whenBlock.statements, span: spanOf(buttonTok.span, end.span) };
   }
 
   // ADR-012 — reuses FOR EACH / GET rather than inventing a parallel

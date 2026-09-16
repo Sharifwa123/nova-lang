@@ -1,0 +1,10 @@
+# expect: E-SEM-037
+PAGE "/"
+    SET label = "hello"
+    TEXT label
+    BUTTON "Click"
+        WHEN CLICKED
+            CHANGE label = UPPER(label)
+        END
+    END
+END

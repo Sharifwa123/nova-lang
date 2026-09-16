@@ -4,8 +4,9 @@
 
 NOVA is a programming language meant to eventually unify core logic, data
 modeling, UI, and APIs into one language — see
-[docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding v0.1 spec and
-[docs/adr/](docs/adr/) for the two architectural decisions frozen so far.
+[docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding spec (now
+covering v0.1 through v0.12) and [docs/adr/](docs/adr/) for the thirteen
+architectural decisions frozen so far.
 
 ## How this repository came to exist (important context)
 
@@ -115,16 +116,27 @@ dependency-light specifically to make that migration mechanical later.
   server exists to make "live" data honest yet. Field access
   (`product.name`) is checked against the real `DATA` shape. See
   `examples/data_bound_website.nova`.
-- **210/210 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.12 (ADR-013) implemented**: interactive `PAGE` — page-local state
+  (`SET`/`CHANGE`, reused) and `BUTTON`/`WHEN CLICKED` compiled to real
+  client-side JavaScript. Click handlers may only `CHANGE` page-local
+  state with a literal/state/arithmetic expression — no calls, no
+  `SAVE`/`GET`/`ASK` (`E-SEM-037`), checked by the analyzer, not just
+  documented. **This completes every milestone in the original roadmap**
+  (v0.1 through v0.12). Verified the same way the original chat itself
+  verified it: by executing the generated `<script>` against a DOM stub
+  and calling the button functions programmatically — a real onclick →
+  state mutation → `render()` → DOM-text-update chain, not a string
+  match. See `examples/interactive_counter.nova`.
+- **229/229 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **41/41 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 17 valid programs that must run cleanly, 22
+- **44/44 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 18 valid programs that must run cleanly, 23
   invalid programs that must fail with the exact diagnostic code the spec
-  promises, plus two dedicated `nova build` checks (static and
-  data-bound) that write and inspect real HTML output files. This is
-  deliberately the "actual CLI output" level of verification, not just
-  in-process test calls, matching the discipline described in the
-  original chat.
+  promises, plus three dedicated `nova build` checks (static, data-bound,
+  and interactive — the last one executing real generated JavaScript)
+  that inspect real output files. This is deliberately the "actual CLI
+  output" level of verification, not just in-process test calls, matching
+  the discipline described in the original chat.
 - Every diagnostic in SPECIFICATION.md §11's table is implemented and has
   at least one test or example exercising it.
 
@@ -132,7 +144,7 @@ Verify it yourself:
 ```bash
 node test/run.js
 node test/run-examples.js
-node src/cli.js build examples/data_bound_website.nova && cat examples/dist/catalog.html
+node src/cli.js build examples/interactive_counter.nova && cat examples/dist/counter.html
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -160,44 +172,44 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   detail (no code/kind to match on), and has no re-throw yet.
 - `PAGE` has only four leaf elements (`TITLE`/`STYLE`/`HEADING`/`TEXT` —
   no heading levels, layout containers, links, images, or lists) and one
-  data source (`FOR EACH...IN GET`, no `WHERE` filtering, no nested
-  `DATA` fields beyond one level deep in practice, though the grammar
-  doesn't forbid it). No interactivity (`BUTTON`/`WHEN`) or server
-  (`API`/`SECURITY`) yet — interactivity is the next, final planned
-  milestone (see below).
+  data source (`FOR EACH...IN GET`, no `WHERE` filtering).
+- `BUTTON` is top-level only (not inside `FOR EACH` — no per-record
+  buttons yet, `E-SEM-038`); page-local state is scalar-only (no
+  list/record state); no `TRY`/`CATCH` inside a click handler either
+  (only `CHANGE` is allowed there at all). No server (`API`/`SECURITY`)
+  yet at all — everything interactive is purely client-side.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
 ## What's next
 
-The original chat's own roadmap, in order (each deserves its own ADR
-before implementation, per the process that's held so far):
+**Every milestone in the original roadmap (v0.1 through v0.12) is now
+implemented.** What's left is explicitly beyond what the original chat
+described, with no surviving detail to reconstruct from at all — genuinely
+new ground, not a recovery:
 
-1. **Interactive `PAGE`** — `BUTTON`/`WHEN clicked` compiled to
-   restricted, sandboxed client-side JavaScript. This is the last item
-   with any concrete detail surviving from the original chat (its very
-   first message flagged "how does a PAGE safely call into backend logic
-   without creating a client/server RPC bug class" as the central open
-   question) — specifically restrict `SAVE`/`GET`/`ASK`/arbitrary calls
-   out of click handlers, and verify the restriction by actually trying to
-   sneak one past the real CLI, not just by reading the generated code.
-   This is the **last originally-planned milestone** (v0.12 in the
-   original's own numbering) — completing it finishes the entire roadmap
-   this repository set out to recover and continue.
-2. From there: a minimal server/API pillar, durable storage, security
-   basics, mobile/desktop targets, native compilation/self-hosting — all
-   explicitly multi-month-plus territory, not a next milestone, and with
-   no surviving detail from the original chat at all — genuinely new
-   ground past this point.
+1. A minimal server/API pillar (`API`/`SERVICE`, still forward-reserved
+   keywords with no grammar) — the natural next step now that `PAGE` has
+   client-side state but nothing to talk to server-side. This is where
+   "data-bound `PAGE`" (ADR-012) stops being a build-time-only static-site
+   snapshot and could become genuinely live.
+2. Security basics (`SECURITY`, also still reserved).
+3. Durable (file-backed, not in-memory-only) persistence.
+4. Mobile/desktop targets, native compilation/self-hosting — explicitly
+   multi-month-plus territory.
 
-The process discipline that held for 13 milestones in the original and is
-worth continuing: **ADR before implementation** for any real design
-decision, smallest-correct-version per milestone (resist doing three
-milestones' worth of surface in one pass), and **verify through the real
-CLI** — not just unit tests — before calling a milestone done, especially
-for anything with genuine I/O or generated-code output (client-side JS,
-piped stdin) where a passing unit test can still hide a real bug a live run
-would catch immediately.
+The process discipline that held for 13 milestones and is worth
+continuing for anything past this point: **ADR before implementation**
+for any real design decision, smallest-correct-version per milestone
+(resist doing three milestones' worth of surface in one pass), and
+**verify through the real CLI** — not just unit tests — before calling a
+milestone done, especially for anything with genuine I/O or generated-code
+output (client-side JS, piped stdin) where a passing unit test can still
+hide a real bug a live run would catch immediately. ADR-013's own
+verification is the clearest example in this repo: it doesn't just assert
+the generated HTML contains expected substrings, it actually executes the
+generated `<script>` against a DOM stub and calls the button functions
+programmatically.
 
 ## Files worth reading, in order
 
@@ -208,8 +220,8 @@ would catch immediately.
    procedures (004), `DATA` named types (005), persistence (006), the
    standard library (007), `ASK` input (008), list indexing/mutation
    (009), error handling (010), the static PAGE compiler (011),
-   data-bound PAGE (012) — read the last two in particular before
-   touching PAGE further.
+   data-bound PAGE (012), interactive PAGE (013) — read the last three in
+   particular before touching PAGE further.
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

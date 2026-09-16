@@ -300,13 +300,43 @@ export class Analyzer {
     this.pages.set(stmt.route, stmt);
   }
 
-  // ADR-012 — recursive: a PAGE-level FOR EACH nests more page-elements.
-  // `loopVarStack` is every enclosing FOR EACH's { name, dataTypeName },
-  // outermost first, so a body can reference any of them (like ordinary
-  // lexical scoping) - and their fields are checked against the real DATA
-  // shape (reusing staticFieldType, the same machinery ordinary .field
-  // access already uses).
-  validatePageElements(elements, loopVarStack, topLevel) {
+  // ADR-013 — page-local state (SET at a PAGE's top level) is collected
+  // once, up front, so BUTTON/TEXT/HEADING can reference it regardless of
+  // where in the page it's declared (the same "register names first"
+  // pattern used for DATA/procedures).
+  collectPageStateVars(elements) {
+    const stateVars = new Map();
+    for (const el of elements) {
+      if (el.kind !== "SET") continue;
+      if (stateVars.has(el.name.name)) {
+        err(
+          CODES.DUPLICATE_PAGE_STATE,
+          `"${el.name.name}" is already declared as page-local state.`,
+          el.name.span,
+          "Page-local state can only be declared once per PAGE.",
+          `Rename one of the declarations, e.g. ${el.name.name}2.`
+        );
+      }
+      if (!isStaticLiteral(el.value)) {
+        err(
+          CODES.PAGE_CONTENT_NOT_STATIC,
+          "Page-local state's initial value must be a plain literal (PAGE content is compiled, not run).",
+          el.value.span
+        );
+      }
+      stateVars.set(el.name.name, staticLiteralType(el.value));
+    }
+    return stateVars;
+  }
+
+  // ADR-012/ADR-013 — recursive: a PAGE-level FOR EACH nests more page-
+  // elements. `loopVarStack` is every enclosing FOR EACH's { name,
+  // dataTypeName }, outermost first, so a body can reference any of them
+  // (like ordinary lexical scoping) - and their fields are checked
+  // against the real DATA shape (reusing staticFieldType, the same
+  // machinery ordinary .field access already uses). `stateVars` is the
+  // whole PAGE's page-local state (name -> type), collected once up front.
+  validatePageElements(elements, loopVarStack, topLevel, stateVars) {
     let sawTitle = false;
     for (const el of elements) {
       if (el.kind === "FOR_EACH") {
@@ -322,22 +352,41 @@ export class Analyzer {
         this.validatePageElements(
           el.body,
           [...loopVarStack, { name: el.loopVar.name, dataTypeName: el.dataTypeName }],
-          false
+          false,
+          stateVars
         );
         continue;
       }
 
-      if ((el.kind === "TITLE" || el.kind === "STYLE") && !topLevel) {
+      if (el.kind === "BUTTON") {
+        if (!topLevel) {
+          err(
+            CODES.BUTTON_INSIDE_LOOP_NOT_SUPPORTED,
+            "BUTTON inside FOR EACH is not supported yet.",
+            el.span,
+            "A button per rendered record needs to know which record it belongs to - a real design question left to a later milestone.",
+            null
+          );
+        }
+        this.checkPageContent(el.label, loopVarStack, stateVars);
+        for (const action of el.actions) this.checkButtonAction(action, stateVars);
+        continue;
+      }
+
+      if ((el.kind === "TITLE" || el.kind === "STYLE" || el.kind === "SET") && !topLevel) {
         err(
           CODES.PAGE_TITLE_STYLE_NOT_TOP_LEVEL,
           `${el.kind} must be at the top level of a PAGE, not inside FOR EACH.`,
           el.span,
-          `${el.kind === "TITLE" ? "A title" : "A stylesheet"} repeated once per record has no meaning.`,
+          el.kind === "SET"
+            ? "Page-local state is scoped to the whole PAGE, not to one iteration."
+            : `${el.kind === "TITLE" ? "A title" : "A stylesheet"} repeated once per record has no meaning.`,
           null
         );
       }
+      if (el.kind === "SET") continue; // already validated by collectPageStateVars
 
-      this.checkPageContent(el.value, loopVarStack);
+      this.checkPageContent(el.value, loopVarStack, stateVars);
 
       if (el.kind === "STYLE" && staticLiteralType(el.value) !== "text") {
         err(
@@ -355,11 +404,14 @@ export class Analyzer {
     }
   }
 
-  // ADR-012 — a page-element's value is valid iff it's a plain literal, or
-  // a field-access chain rooted at an enclosing FOR EACH's loop variable
-  // (checked against that DATA type's real fields via staticFieldType).
-  checkPageContent(expr, loopVarStack) {
+  // ADR-012/ADR-013 — a page-element's value is valid iff it's a plain
+  // literal, a field-access chain rooted at an enclosing FOR EACH's loop
+  // variable (checked against that DATA type's real fields via
+  // staticFieldType), or a bare reference to page-local state.
+  checkPageContent(expr, loopVarStack, stateVars) {
     if (isStaticLiteral(expr)) return;
+
+    if (expr.kind === "Identifier" && stateVars.has(expr.name)) return;
 
     if (expr.kind === "FieldAccess") {
       const fields = [];
@@ -378,17 +430,118 @@ export class Analyzer {
       }
     }
 
-    const loopVarHint =
-      loopVarStack.length > 0
-        ? ` or a field of ${loopVarStack.map((f) => `"${f.name}"`).join("/")} (the current FOR EACH loop variable)`
-        : "";
+    const hints = [];
+    if (loopVarStack.length > 0) {
+      hints.push(`a field of ${loopVarStack.map((f) => `"${f.name}"`).join("/")} (the current FOR EACH loop variable)`);
+    }
+    if (stateVars.size > 0) hints.push("a reference to page-local state declared with SET");
+    const hintText = hints.length > 0 ? ` or ${hints.join(", or ")}` : "";
     err(
       CODES.PAGE_CONTENT_NOT_STATIC,
-      `This requires a plain literal value${loopVarHint} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
+      `This requires a plain literal value${hintText} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
       expr.span,
       "PAGE content is compiled, not run, so there is no variable state for anything else to resolve against.",
       null
     );
+  }
+
+  // ADR-013 — validates one statement inside a BUTTON's WHEN CLICKED
+  // block. Only CHANGE targeting page-local state, with a "safe"
+  // expression, is allowed - see assertNoUnsafeConstructs for why type/
+  // name correctness and sandboxing are checked as two separate passes.
+  checkButtonAction(action, stateVars) {
+    if (action.kind !== "ChangeStatement") {
+      err(
+        CODES.BUTTON_ACTION_NOT_CHANGE,
+        `Only CHANGE is allowed inside WHEN CLICKED, but found ${action.kind}.`,
+        action.span,
+        "SAVE, GET, ASK, and procedure calls are never permitted in a click handler - a click handler can only update page-local state.",
+        null
+      );
+    }
+    if (action.indexPath.length > 0) {
+      err(
+        CODES.BUTTON_ACTION_INDEXED,
+        "Page-local state is scalar - indexed CHANGE (list[i] = ...) is not allowed inside WHEN CLICKED.",
+        action.span
+      );
+    }
+    if (!stateVars.has(action.name.name)) {
+      err(
+        CODES.BUTTON_ACTION_NOT_STATE,
+        `CHANGE inside WHEN CLICKED can only target page-local state, but "${action.name.name}" isn't page-local state declared with SET.`,
+        action.name.span,
+        null,
+        "Declare it first with SET at the PAGE's top level."
+      );
+    }
+
+    this.assertNoUnsafeConstructs(action.value);
+    // Reuses ordinary infer()/reassignCompatibleType against a scope
+    // containing ONLY page-local state - any other identifier fails as an
+    // ordinary undefined name (E-SEM-001), for free.
+    const stateScope = new Scope();
+    for (const [name, type] of stateVars) stateScope.defineLocal(name, type);
+    const exprType = this.infer(action.value, stateScope);
+    const existingType = stateVars.get(action.name.name);
+    stateVars.set(action.name.name, this.reassignCompatibleType(existingType, exprType, action.name.name, action.span));
+  }
+
+  // ADR-013 — the sandboxing half of click-handler validation: no calls,
+  // no SAVE/GET/ASK, no field/index access, no list/record literals.
+  // Deliberately separate from infer() (which alone would happily accept
+  // a call to any ordinary, safe-looking procedure) - this is the direct
+  // countermeasure to the RPC-shaped hole this whole ADR exists to close.
+  assertNoUnsafeConstructs(expr) {
+    switch (expr.kind) {
+      case "IntegerLiteral":
+      case "DecimalLiteral":
+      case "BooleanLiteral":
+      case "Identifier":
+        return;
+      case "StringLiteral":
+        if (expr.parts.some((p) => p.kind === "interp")) {
+          err(CODES.CLICK_HANDLER_UNSAFE, "Interpolated strings are not allowed inside a click handler.", expr.span);
+        }
+        return;
+      case "UnaryOp":
+        this.assertNoUnsafeConstructs(expr.operand);
+        return;
+      case "BinaryOp":
+        this.assertNoUnsafeConstructs(expr.left);
+        this.assertNoUnsafeConstructs(expr.right);
+        return;
+      case "CallExpression":
+        err(
+          CODES.CLICK_HANDLER_UNSAFE,
+          `Click handlers cannot call procedures ("${expr.callee.name}") - only literals, page-local state, and +-*/ ==!= <><= >= AND OR NOT are allowed.`,
+          expr.span
+        );
+        return;
+      case "SaveExpression":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use SAVE.", expr.span);
+        return;
+      case "GetExpression":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use GET.", expr.span);
+        return;
+      case "AskExpression":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use ASK.", expr.span);
+        return;
+      case "FieldAccess":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use .field access (page-local state is scalar).", expr.span);
+        return;
+      case "IndexAccess":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use [ ] indexing (page-local state is scalar).", expr.span);
+        return;
+      case "ListLiteral":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use list literals (page-local state is scalar).", expr.span);
+        return;
+      case "RecordLiteral":
+        err(CODES.CLICK_HANDLER_UNSAFE, "Click handlers cannot use record literals (page-local state is scalar).", expr.span);
+        return;
+      default:
+        err(CODES.CLICK_HANDLER_UNSAFE, "This is not allowed inside a click handler.", expr.span);
+    }
   }
 
   // Phase 2 — every DATA/procedure name is now known, so field and
@@ -426,7 +579,8 @@ export class Analyzer {
     // shapes) needs the DATA fields just resolved above, so it happens
     // last in phase 2, not during phase 1's registerPage.
     for (const [, page] of this.pages) {
-      this.validatePageElements(page.elements, [], true);
+      const stateVars = this.collectPageStateVars(page.elements); // ADR-013
+      this.validatePageElements(page.elements, [], true, stateVars);
     }
   }
 

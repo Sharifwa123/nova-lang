@@ -1,0 +1,33 @@
+# v0.12 (ADR-013): BUTTON/WHEN CLICKED compiled to real client-side
+# JavaScript. Page-local state reuses SET (declare) and CHANGE (mutate) -
+# the same split ordinary variables and list elements already use. Click
+# handlers can only CHANGE page-local state with a safe expression (no
+# calls, no SAVE/GET/ASK) - checked by the analyzer, not just documented.
+# Try:
+#   node src/cli.js build examples/interactive_counter.nova
+#   open examples/dist/counter.html in a real browser and click the buttons
+
+PAGE "/counter"
+    TITLE "Counter"
+    STYLE "body { font-family: sans-serif; margin: 3em auto; max-width: 20em; text-align: center; } button { font-size: 1.2em; margin: 0.3em; padding: 0.4em 0.8em; }"
+
+    SET count = 0
+
+    HEADING count
+
+    BUTTON "+1"
+        WHEN CLICKED
+            CHANGE count = count + 1
+        END
+    END
+    BUTTON "-1"
+        WHEN CLICKED
+            CHANGE count = count - 1
+        END
+    END
+    BUTTON "Reset"
+        WHEN CLICKED
+            CHANGE count = 0
+        END
+    END
+END

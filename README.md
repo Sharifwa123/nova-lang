@@ -5,15 +5,17 @@ instructions to a computer while remaining precise enough for a real
 compiler pipeline — one language meant to eventually span core logic, data,
 UI, and APIs, instead of stitching together a different language per layer.
 
-This repository is currently at **v0.10**: lexer → parser → AST → semantic
-analyzer → tree-walking interpreter, covering the core language
-(SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
-procedures, `DATA` named types, in-memory persistence (`SAVE`/`GET`/
-`DELETE`), a small stdlib, `ASK` input, list indexing/mutation, `TRY`/
-`CATCH` error handling, and a static HTML `PAGE` compiler (`nova build`).
-See [HANDOFF.md](HANDOFF.md) for how this repo came to exist and what's
-next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding
-language specification.
+This repository implements **v0.1 through v0.12** — every milestone in the
+original design roadmap: lexer → parser → AST → semantic analyzer →
+tree-walking interpreter, covering the core language (SHOW/SET/CHANGE/IF/
+FOR EACH/REPEAT/DO/RETURN), lists/records, typed procedures, `DATA` named
+types, in-memory persistence (`SAVE`/`GET`/`DELETE`), a small stdlib,
+`ASK` input, list indexing/mutation, `TRY`/`CATCH` error handling, and a
+`PAGE` compiler (`nova build`) spanning static HTML, data-bound content,
+and real client-side interactivity (`BUTTON`/`WHEN CLICKED` compiled to
+JavaScript). See [HANDOFF.md](HANDOFF.md) for how this repo came to exist
+and what's next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for
+the binding language specification.
 
 ## Try it
 
@@ -31,6 +33,7 @@ node src/cli.js run examples/list_indexing.nova
 node src/cli.js run examples/error_handling.nova
 node src/cli.js build examples/website.nova              # static PAGE
 node src/cli.js build examples/data_bound_website.nova   # data-bound PAGE
+node src/cli.js build examples/interactive_counter.nova  # interactive PAGE (real JS)
 ```
 
 ```nova

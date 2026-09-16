@@ -984,17 +984,70 @@ unchanged.
 
 ---
 
-## What v0.12 and beyond were (per the original design chat)
+## v0.12 Amendments — Interactive PAGE: BUTTON / WHEN CLICKED (ADR-013)
 
-The original chat session (see the raw transcript reference above) is the
-source for this final planned milestone:
+Status: Implemented (this repository) — **the last originally-planned
+milestone**. See
+[docs/adr/ADR-013-interactive-pages.md](adr/ADR-013-interactive-pages.md)
+for full rationale. **Provenance note**: unlike ADR-011/012, real detail
+survived here — the original chat's own summary confirmed the exact
+keywords `BUTTON`/`WHEN clicked`, a "page-local state" concept, the
+`SAVE`/`GET`/`ASK`/call restriction on click handlers, and its
+verification method (execute the generated JavaScript, not just diff the
+HTML). Grammar and codegen below are this repository's own reconstruction
+from that description.
 
-1. **v0.12 (ADR-013)** — `BUTTON`/`WHEN clicked` compiled to real, sandboxed
-   client-side JavaScript (state mutation restricted to prevent
-   `SAVE`/`GET`/`ASK`/arbitrary calls inside click handlers), verified by
-   executing the generated `<script>` in Node against a DOM stub.
+**New grammar**:
+```
+page-element ::= ... (ADR-011/012, unchanged)
+               | "SET" identifier "=" literal
+               | "BUTTON" expression NEWLINE "WHEN" "CLICKED" block "END" NEWLINE "END"
+```
+New keywords `BUTTON`, `CLICKED`; `WHEN` graduates from forward-reserved
+(§2.6) into real grammar.
 
-None of that source code survived (see [HANDOFF.md](../HANDOFF.md) for why) —
-only the prose narrative of what was built and why. Re-implementing v0.2
-onward from scratch, following the same ADR-first discipline, is the
-project's next phase; see HANDOFF.md's roadmap for the recommended order.
+DECISION: a `SET` at a `PAGE`'s top level declares **page-local state** —
+initialized from a literal, mutable only via `CHANGE` inside a `WHEN
+CLICKED` block. The exact same `SET`-declares/`CHANGE`-mutates split
+ADR-002 established, applied a third time (after ADR-009's list elements)
+to a third kind of storage — not a new rule.
+
+DECISION: a `WHEN CLICKED` block parses as an **ordinary** statement block
+(any statement syntactically valid) — what's actually *allowed* there is
+a semantic restriction, not a parser one: every statement must be
+`CHANGE <pageLocalState> = <safe expression>` (`E-SEM-034` for any other
+statement kind, `E-SEM-035` if the target isn't page-local state,
+`E-SEM-036` for an indexed target). A safe expression is a literal, a
+page-local-state reference, or `+ - * / == != < > <= >= AND OR NOT`
+combining safe expressions — never a call, `SAVE`/`GET`/`ASK`, field/
+index access, or a list/record literal (`E-SEM-037`, checked by a
+dedicated structural pass, `assertNoUnsafeConstructs`, kept deliberately
+separate from type-checking — see the ADR for why that split matters).
+
+DECISION: `BUTTON` is top-level only (`E-SEM-038` inside `FOR EACH` — a
+button per rendered record needs to know which record, a real question
+left to a later milestone).
+
+DECISION: `nova build` emits one `<script>` per interactive page — a
+`state` object, a `render()` updating every state-bound element's
+`textContent` (never `innerHTML`, so no HTML-escaping is needed for these
+updates specifically), and one named function per `BUTTON`. Verification
+matches the original's own approach directly: tests execute the generated
+script against a DOM stub and call the button functions programmatically,
+asserting on the resulting state and DOM text — not a string match.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-033 | Duplicate page-local state name |
+| E-SEM-034 | A non-CHANGE statement inside WHEN CLICKED |
+| E-SEM-035 | A CHANGE target inside WHEN CLICKED that isn't page-local state |
+| E-SEM-036 | An indexed CHANGE target inside WHEN CLICKED (state is scalar-only) |
+| E-SEM-037 | An unsafe construct (call, SAVE/GET/ASK, field/index access, list/record literal) inside a click handler |
+| E-SEM-038 | BUTTON used inside FOR EACH (not yet supported) |
+
+Everything else in §1–§17 and the v0.2–v0.11 amendments above is
+unchanged. **This completes every milestone named in the original
+roadmap** (v0.1 through v0.12); anything past this point is new ground,
+not a recovery of prior design.
