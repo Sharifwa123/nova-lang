@@ -79,3 +79,7 @@ docs/
 examples/        runnable .nova programs (and examples/errors/ for diagnostics)
 test/            zero-dependency unit tests + a real-CLI example runner
 ```
+
+## License
+
+[MIT](LICENSE)
