@@ -1,7 +1,7 @@
 {
   "name": "nova-lang",
-  "version": "0.1.0",
-  "description": "NOVA - a unified, natural-reading programming language. v0.1 core: lexer, parser, semantic analyzer, tree-walking interpreter.",
+  "version": "0.12.0",
+  "description": "NOVA - a unified, natural-reading programming language. v0.1-v0.12: core language, lists/records, typed procedures, DATA named types, persistence, a stdlib, ASK input, list indexing, TRY/CATCH, and a PAGE compiler spanning static HTML, data-bound content, and client-side interactivity.",
   "type": "module",
   "bin": {
     "nova": "./src/cli.js"
