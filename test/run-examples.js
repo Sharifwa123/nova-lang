@@ -224,6 +224,22 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
     const productsBody = await products.json();
     const missing = await fetch(`http://localhost:${port}/nope`);
 
+    // ADR-015 — API POST + REQUEST AS: post a real JSON body to the real
+    // spawned server, then confirm a later GET sees it (genuinely live,
+    // not just an in-process assertion).
+    const created = await fetch(`http://localhost:${port}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprocket", price: 4.25 }),
+    });
+    const createdBody = await created.json();
+    const badPost = await fetch(`http://localhost:${port}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Missing price" }),
+    });
+    const productsAfterPost = await (await fetch(`http://localhost:${port}/products`)).json();
+
     ok =
       hello.status === 200 &&
       helloBody === "Hello from NOVA" &&
@@ -232,8 +248,15 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
       productsBody.length === 2 &&
       productsBody[0].name === "Widget" &&
       productsBody[0].price === 9.99 &&
-      missing.status === 404;
-    if (!ok) failureDetail = `hello=${JSON.stringify(helloBody)} products=${JSON.stringify(productsBody)} missing.status=${missing.status}`;
+      missing.status === 404 &&
+      created.status === 200 &&
+      createdBody.name === "Sprocket" &&
+      createdBody.price === 4.25 &&
+      badPost.status === 400 &&
+      productsAfterPost.length === 3;
+    if (!ok) {
+      failureDetail = `hello=${JSON.stringify(helloBody)} products=${JSON.stringify(productsBody)} missing.status=${missing.status} created.status=${created.status} createdBody=${JSON.stringify(createdBody)} badPost.status=${badPost.status} productsAfterPost=${JSON.stringify(productsAfterPost)}`;
+    }
   } catch (e) {
     failureDetail = String(e.stack ?? e);
   } finally {

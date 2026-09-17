@@ -5,7 +5,7 @@ instructions to a computer while remaining precise enough for a real
 compiler pipeline — one language meant to eventually span core logic, data,
 UI, and APIs, instead of stitching together a different language per layer.
 
-This repository implements **v0.1 through v0.13**: v0.1–v0.12 is every
+This repository implements **v0.1 through v0.14**: v0.1–v0.12 is every
 milestone in the original design roadmap — lexer → parser → AST →
 semantic analyzer → tree-walking interpreter, covering the core language
 (SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
@@ -13,12 +13,14 @@ procedures, `DATA` named types, in-memory persistence (`SAVE`/`GET`/
 `DELETE`), a small stdlib, `ASK` input, list indexing/mutation,
 `TRY`/`CATCH` error handling, and a `PAGE` compiler (`nova build`)
 spanning static HTML, data-bound content, and real client-side
-interactivity (`BUTTON`/`WHEN CLICKED` compiled to JavaScript). v0.13 is
-the first milestone past that original roadmap: `SERVICE`/`API` compile to
-a real, live HTTP server (`nova serve`) sharing one persistence store
-across every request. See [HANDOFF.md](HANDOFF.md) for how this repo came
-to exist and what's next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md)
-for the binding language specification.
+interactivity (`BUTTON`/`WHEN CLICKED` compiled to JavaScript). v0.13 and
+v0.14 are the first milestones past that original roadmap: `SERVICE`/`API`
+compile to a real, live HTTP server (`nova serve`) sharing one persistence
+store across every request, with `GET` (v0.13) and `POST` +
+`REQUEST AS <DataType>` (v0.14) reading and validating a real JSON request
+body. See [HANDOFF.md](HANDOFF.md) for how this repo came to exist and
+what's next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the
+binding language specification.
 
 ## Try it
 
@@ -38,7 +40,10 @@ node src/cli.js build examples/website.nova              # static PAGE
 node src/cli.js build examples/data_bound_website.nova   # data-bound PAGE
 node src/cli.js build examples/interactive_counter.nova  # interactive PAGE (real JS)
 node src/cli.js serve examples/api_service.nova 3000      # live HTTP server (SERVICE/API)
-# in another terminal: curl http://localhost:3000/hello && curl http://localhost:3000/products
+# in another terminal:
+#   curl http://localhost:3000/hello
+#   curl http://localhost:3000/products
+#   curl -X POST -d '{"name":"Sprocket","price":4.25}' http://localhost:3000/products
 ```
 
 ```nova

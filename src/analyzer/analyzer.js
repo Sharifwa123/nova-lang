@@ -40,6 +40,12 @@ function staticLiteralType(expr) {
 // (checked separately, since they're user-declared) extend this set.
 const PRIMITIVE_TYPE_NAMES = new Set(["integer", "decimal", "text", "boolean", "list", "record"]);
 
+// ADR-015 — the subset of PRIMITIVE_TYPE_NAMES a REQUEST AS <Type> field
+// may be: a JSON request body has a direct, unambiguous mapping only for
+// these four; a nested DATA type, list, or record would need a recursive
+// (and, for list, an element-typed) validation story NOVA doesn't have yet.
+const REQUEST_SCALAR_TYPES = new Set(["integer", "decimal", "text", "boolean"]);
+
 // ADR-004 — conservative, sound "does this statement list definitely
 // return a value on every path" check. See docs/adr/ADR-004 for the exact
 // rules and why loops never count.
@@ -71,6 +77,7 @@ export class Analyzer {
     this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
     this.pages = new Map(); // ADR-011 — route -> PageDeclaration node
     this.apiRoutes = new Map(); // ADR-014 — "<METHOD> <route>" -> api declaration
+    this.currentApiMethod = null; // ADR-015 — the API method whose body is currently being checked, or null
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
       this.globalScope.defineLocal(name, type);
@@ -920,8 +927,18 @@ export class Analyzer {
         // RETURNS procedure exactly - falls through to NONE/null).
         for (const api of stmt.apis) {
           const apiScope = this.globalScope.child();
-          this.checkStatements(api.body, apiScope, { insideProcedure: true, declaredReturnType: null });
-          this.assertNoAskInStatements(api.body);
+          // ADR-015 — tracks which API method's body is currently being
+          // checked, so REQUEST (below, in infer()) can be statically
+          // restricted to POST handlers only. A single instance field, not
+          // threaded through infer()'s signature - restored afterward so
+          // it's null again outside any API body (top level, DO procedures).
+          this.currentApiMethod = api.method;
+          try {
+            this.checkStatements(api.body, apiScope, { insideProcedure: true, declaredReturnType: null });
+            this.assertNoAskInStatements(api.body);
+          } finally {
+            this.currentApiMethod = null;
+          }
         }
         return;
       }
@@ -1175,6 +1192,46 @@ export class Analyzer {
       case "AskExpression": {
         this.infer(expr.prompt, scope); // any type is fine, display()-ed like SHOW
         return "text";
+      }
+
+      case "RequestExpression": {
+        // ADR-015 — REQUEST is only meaningful (and only ever populated)
+        // inside a POST handler's own body - not a GET handler, not a
+        // DO procedure another handler happens to call (ProcedureDeclaration
+        // bodies are checked once, at their own declaration, never
+        // re-entered from a call site, so this check is fully sound).
+        if (this.currentApiMethod !== "POST") {
+          err(
+            CODES.REQUEST_OUTSIDE_POST_HANDLER,
+            "REQUEST can only be used inside an API POST handler's body.",
+            expr.span,
+            "A GET handler has no request body, and REQUEST is not visible from a DO procedure another handler happens to call - only its own POST handler's body.",
+            "Move this into an API POST ... END handler, or remove it."
+          );
+        }
+        if (!this.dataTypes.has(expr.typeName)) {
+          err(
+            CODES.UNKNOWN_DATA_TYPE_IN_GET,
+            `"${expr.typeName}" is not a DATA type.`,
+            expr.typeNameSpan,
+            null,
+            `Declare it first with DATA ${expr.typeName} ... END, or check the spelling.`
+          );
+        }
+        const dataType = this.dataTypes.get(expr.typeName);
+        for (const field of dataType.fields) {
+          if (!REQUEST_SCALAR_TYPES.has(field.type)) {
+            err(
+              CODES.REQUEST_TYPE_UNSUPPORTED_FIELD,
+              `REQUEST AS ${expr.typeName} requires every field to be integer/decimal/text/boolean, but "${field.name}" is ${describeType(field.type)}.`,
+              expr.typeNameSpan,
+              "REQUEST does not support nested DATA/list/record fields yet.",
+              null,
+              [[dataType.node.name.span, `${expr.typeName} is declared here`]]
+            );
+          }
+        }
+        return expr.typeName;
       }
 
       default:

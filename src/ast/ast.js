@@ -73,3 +73,8 @@ export const AskExpression = (prompt, span) => node("AskExpression", { prompt },
 
 // ADR-009
 export const IndexAccess = (target, index, span) => node("IndexAccess", { target, index }, span);
+
+// ADR-015 — evaluates to the current POST request's JSON body, validated
+// against `typeName`'s declared fields.
+export const RequestExpression = (typeName, typeNameSpan, span) =>
+  node("RequestExpression", { typeName, typeNameSpan }, span);

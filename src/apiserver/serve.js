@@ -5,6 +5,13 @@
 // requests - unlike PAGE's build-time-only snapshot (ADR-012).
 import http from "node:http";
 import { NovaError } from "../diagnostics/diagnostic.js";
+import { CODES } from "../diagnostics/codes.js";
+
+// ADR-015 — these two are, definitionally, "the client sent a body that
+// doesn't match what this endpoint declared it needs" - a client error,
+// not a server one, unlike every other NovaError (which stays 500, per
+// ADR-014).
+const CLIENT_ERROR_CODES = new Set([CODES.REQUEST_BODY_NOT_OBJECT, CODES.REQUEST_BODY_FIELD_MISMATCH]);
 
 // Flattens every SERVICE block's API declarations into one routing table,
 // keyed by "<METHOD> <route>" (already validated globally unique by the
@@ -44,35 +51,68 @@ export function valueToJSON(v) {
   }
 }
 
-// The actual (req, res) => void handler. A NovaError from a handler body
-// (a genuine NOVA runtime error, e.g. divide-by-zero) becomes a 500 with
-// the diagnostic message as JSON, without taking the server down - the
-// one place this ADR departs from "let a NovaError propagate untouched",
-// because one bad request killing every other in-flight/future request
-// would defeat the point of a long-running server. Any other exception (a
-// genuine interpreter bug, not a NOVA-level error) is left to propagate,
-// matching TryStatement's own existing rule (ADR-010).
-export function createRequestListener(interpreter, routes) {
-  return (req, res) => {
-    const url = new URL(req.url, "http://localhost");
-    const api = routes.get(`${req.method} ${url.pathname}`);
-    if (!api) {
-      res.writeHead(404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: `No API endpoint for ${req.method} ${url.pathname}` }));
+// ADR-015 — buffers a POST body (NOVA's interpreter is synchronous - no
+// `await` inside execStatements - so a handler must receive an
+// already-parsed value, not a stream) and JSON.parse()s it. A parse
+// failure is treated exactly like "no body at all": REQUEST AS <Type>'s
+// own runtime shape-check reports the same "not a valid <Type>" story
+// either way, so there's no need for a separate diagnostic here.
+async function readJsonBody(req) {
+  if (req.method !== "POST") return null;
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (raw.length === 0) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function handleRequest(req, res, interpreter, routes) {
+  const url = new URL(req.url, "http://localhost");
+  const api = routes.get(`${req.method} ${url.pathname}`);
+  if (!api) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: `No API endpoint for ${req.method} ${url.pathname}` }));
+    return;
+  }
+  const requestBody = await readJsonBody(req);
+  try {
+    const result = interpreter.invokeApiHandler(api.body, requestBody);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(valueToJSON(result)));
+  } catch (e) {
+    // A NovaError from a handler body (a genuine NOVA runtime error) never
+    // takes the server down - the one place this ADR departs from "let a
+    // NovaError propagate untouched", because one bad request killing
+    // every other in-flight/future request would defeat the point of a
+    // long-running server. A body-shape mismatch (ADR-015) is the client's
+    // fault (400); everything else stays 500, as ADR-014 established. Any
+    // OTHER exception (a genuine interpreter bug, not a NOVA-level error)
+    // is left to propagate, matching TryStatement's own rule (ADR-010).
+    if (e instanceof NovaError) {
+      const status = CLIENT_ERROR_CODES.has(e.diagnostic.code) ? 400 : 500;
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: e.diagnostic.message }));
       return;
     }
-    try {
-      const result = interpreter.invokeApiHandler(api.body);
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(valueToJSON(result)));
-    } catch (e) {
-      if (e instanceof NovaError) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: e.diagnostic.message }));
-        return;
-      }
-      throw e;
-    }
+    throw e;
+  }
+}
+
+// The actual (req, res) => void handler passed to http.createServer.
+export function createRequestListener(interpreter, routes) {
+  return (req, res) => {
+    handleRequest(req, res, interpreter, routes).catch((e) => {
+      // An actual interpreter bug reaching here, already past the
+      // NovaError handling above - crash loudly rather than hide it
+      // (Node's default for an uncaught exception in a request handler).
+      process.nextTick(() => {
+        throw e;
+      });
+    });
   };
 }
 

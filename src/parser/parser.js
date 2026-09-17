@@ -560,18 +560,27 @@ export class Parser {
     return AST.ServiceDeclaration(apis, spanOf(serviceTok.span, end.span));
   }
 
-  // ADR-014 — api-declaration ::= "API" "GET" string-literal NEWLINE
-  //                                statement* "END"
-  // Only GET is supported so far - the grammar itself only accepts that
-  // literal keyword (see the ADR for why this is a parser restriction, not
-  // a semantic one). The body is an ORDINARY statement block - unlike
-  // WHEN CLICKED (ADR-013), an API handler is deliberately NOT sandboxed.
+  // ADR-014/ADR-015 — api-declaration ::= "API" ("GET"|"POST") string-literal
+  //                                        NEWLINE statement* "END"
+  // Only GET and POST are supported so far - the grammar itself only
+  // accepts those literal keywords (see the ADRs for why this is a parser
+  // restriction, not a semantic one). The body is an ORDINARY statement
+  // block - unlike WHEN CLICKED (ADR-013), an API handler is deliberately
+  // NOT sandboxed.
   parseApiDeclaration() {
     const apiTok = this.expectKeyword("API");
-    const methodTok = this.expectKeyword(
-      "GET",
-      'Only GET endpoints are supported so far - write API GET "/route" ... END.'
-    );
+    let methodTok;
+    if (this.checkKeyword("GET") || this.checkKeyword("POST")) {
+      methodTok = this.advance();
+    } else {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected GET or POST, but found ${this.describeToken(this.current())}.`,
+        this.current(),
+        null,
+        'API must be followed by GET or POST, e.g. API GET "/products" or API POST "/products".'
+      );
+    }
     const routeTok = this.current();
     if (routeTok.type !== TokenType.STRING) {
       this.error(
@@ -805,6 +814,13 @@ export class Parser {
       this.advance();
       const prompt = this.parseExpression();
       return AST.AskExpression(prompt, spanOf(tok.span, prompt.span));
+    }
+    // ADR-015 — request-expression ::= "REQUEST" "AS" identifier
+    if (tok.type === TokenType.KEYWORD && tok.value === "REQUEST") {
+      this.advance();
+      this.expectKeyword("AS", 'REQUEST must be followed by AS <DataType>, e.g. REQUEST AS Product.');
+      const typeTok = this.expectIdentifier("a DATA type name");
+      return AST.RequestExpression(typeTok.value, typeTok.span, spanOf(tok.span, typeTok.span));
     }
     if (tok.type === TokenType.IDENTIFIER) {
       this.advance();

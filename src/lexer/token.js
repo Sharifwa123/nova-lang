@@ -13,7 +13,7 @@ export const TokenType = Object.freeze({
 
 // §2.6 — keywords with real grammar (CHANGE: ADR-002, DATA: ADR-005,
 // PAGE/STYLE/TITLE/HEADING/TEXT: ADR-011, BUTTON/WHEN/CLICKED: ADR-013,
-// SERVICE/API: ADR-014).
+// SERVICE/API: ADR-014, POST/REQUEST/AS: ADR-015).
 export const ACTIVE_KEYWORDS = new Set([
   "SET", "CHANGE", "SHOW", "IF", "ELSE", "END",
   "FOR", "EACH", "IN",
@@ -24,7 +24,7 @@ export const ACTIVE_KEYWORDS = new Set([
   "SAVE", "GET", "DELETE", "ASK",
   "TRY", "CATCH",
   "PAGE", "STYLE", "TITLE", "HEADING", "TEXT", "BUTTON", "WHEN", "CLICKED",
-  "SERVICE", "API",
+  "SERVICE", "API", "POST", "REQUEST", "AS",
   "TRUE", "FALSE",
   "AND", "OR", "NOT",
 ]);

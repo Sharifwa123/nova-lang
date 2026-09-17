@@ -1139,3 +1139,69 @@ New diagnostics:
 Everything else in §1–§17 and the v0.2–v0.12 amendments above is
 unchanged — `PAGE`/`nova build` in particular are completely untouched by
 this milestone.
+
+---
+
+## v0.14 Amendments — API POST and REQUEST AS: Reading the Request Body (ADR-015)
+
+Status: Implemented (this repository) — continues directly from ADR-014's
+own explicitly-deferred write-verb work. See
+[docs/adr/ADR-015-api-post-request-body.md](adr/ADR-015-api-post-request-body.md)
+for full rationale.
+
+**§2.6 (amended)** — three new keywords: `POST`, `REQUEST`, `AS` (none
+were previously forward-reserved — the same "introduce a genuinely new
+keyword when needed" precedent ADR-013 set with `BUTTON`/`CLICKED`).
+
+**New grammar**:
+```
+api-declaration ::= "API" ("GET"|"POST") string-literal NEWLINE
+                     statement* "END"
+primary         ::= ... | "REQUEST" "AS" identifier
+```
+
+DECISION: `API` now accepts `POST` alongside `GET` (still only those two —
+`PUT`/`DELETE` remain deferred, each raising its own distinct design
+question). `REQUEST AS <DataType>` is a new expression that evaluates to
+the current POST request's JSON body, validated against `<DataType>`'s
+declared fields — the same "does this value match this `DATA` shape"
+question `checkRecordLiteralAgainstDataType` (ADR-005) already answers for
+a record literal, applied to a value only known at request time instead of
+written in the source file. Its static type is `<DataType>` itself, so
+`SAVE`/`RETURN` afterward work unchanged.
+
+DECISION: `REQUEST` is valid only lexically inside a `POST` handler's own
+body — not a `GET` handler, not a `DO` procedure another handler calls,
+not a file's top level (`E-SEM-042`). Because `ProcedureDeclaration`
+bodies are analyzed exactly once, at their own declaration, never
+re-entered from a call site, this restriction is fully sound (unlike
+ADR-014's shallow, explicitly-limited `ASK` check).
+
+DECISION: every field of `<DataType>` used with `REQUEST AS` must be
+`integer`/`decimal`/`text`/`boolean` (`E-SEM-043`) — a nested `DATA` type,
+`list`, or `record` field would need a recursive (and, for `list`, an
+element-typed) validation story out of scope here, deferred the same way
+ADR-011 deferred variables out of `PAGE` content until ADR-012.
+
+DECISION: at runtime, the request body must be a JSON object matching
+every declared field's presence and JS type (`E-RUN-008` if it isn't an
+object at all; `E-RUN-009` naming the specific missing/mismatched field).
+Extra fields beyond the `DATA` type's own are silently ignored — more
+forgiving than `RecordLiteral`'s exact-match rule, since a request body
+comes from a client NOVA doesn't control, unlike a literal the developer
+wrote. `E-RUN-008`/`E-RUN-009` specifically map to HTTP `400` (the
+client's fault), unlike every other runtime error reaching `nova serve`
+(`500`, unchanged from ADR-014).
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-042 | REQUEST used outside an API POST handler's own body |
+| E-SEM-043 | REQUEST AS a DATA type with a non-integer/decimal/text/boolean field |
+| E-RUN-008 | POST request body is not a JSON object |
+| E-RUN-009 | POST request body is missing a field, or a field's type doesn't match |
+
+Everything else in §1–§17 and the v0.2–v0.13 amendments above is
+unchanged — `API GET` and `PAGE`/`nova build` in particular are completely
+untouched by this milestone.

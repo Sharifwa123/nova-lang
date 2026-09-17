@@ -6,15 +6,17 @@ Read this section first; the rest of the file is the detailed history and
 rationale behind it.
 
 **State**: v0.1 through v0.12 (the entire originally-planned roadmap) plus
-v0.13 — the first milestone past it: `SERVICE`/`API`, a real, live HTTP
-server. 245 unit tests, 49 examples verified through the *real* CLI (not
-just in-process calls), 14 ADRs, zero npm dependencies, MIT licensed.
-Verify it yourself before doing anything else:
+v0.13/v0.14 — the first milestones past it: `SERVICE`/`API`, a real, live
+HTTP server, with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>`
+(v0.14, reading/validating the real JSON request body) both implemented.
+261 unit tests, 51 examples verified through the *real* CLI (not just
+in-process calls), 15 ADRs, zero npm dependencies, MIT licensed. Verify it
+yourself before doing anything else:
 ```bash
 git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
 node test/run.js && node test/run-examples.js
 ```
-If that's not 245/245 and 49/49, something's wrong with *your*
+If that's not 261/261 and 51/51, something's wrong with *your*
 environment, not the code — stop and figure out why before writing
 anything new.
 
@@ -46,11 +48,15 @@ anything new.
 
 **What's actually next**, per this file's own roadmap section below — and
 this is the part with *zero* surviving detail to recover, genuinely new
-ground (v0.13's `SERVICE`/`API` was the first piece of this list; see
-ADR-014):
-1. Write verbs on `API` (`POST`/`PUT`/`DELETE`) — v0.13 only supports
-   `GET`; a write verb needs a request-body story (parsing, validation
-   against a `DATA` shape) that ADR-014 deliberately deferred.
+ground (v0.13's `SERVICE`/`API` and v0.14's `POST`/`REQUEST AS` were the
+first two pieces of this list; see ADR-014/ADR-015):
+1. `PUT`/`DELETE` on `API` — v0.14 added `POST` (with `REQUEST AS
+   <DataType>` validating the JSON body against a flat, primitive-only
+   `DATA` shape); `PUT` implies "update this existing id" and `DELETE`
+   needs no body at all, each a distinct enough question that ADR-015
+   deliberately left them for later. Also still deferred: nested
+   `DATA`/`list`/`record` fields in a `REQUEST AS` shape, and path
+   parameters/query-string parsing in routing.
 2. Connecting `PAGE` to the live server `SERVICE`/`API` now provides —
    today they're two independent pillars; data-bound `PAGE` (ADR-012) is
    still a build-time-only snapshot, on purpose (see ADR-014's Problem
@@ -72,7 +78,7 @@ purpose) isn't obvious from the code alone.
 NOVA is a programming language meant to eventually unify core logic, data
 modeling, UI, and APIs into one language — see
 [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding spec (now
-covering v0.1 through v0.13) and [docs/adr/](docs/adr/) for the fourteen
+covering v0.1 through v0.14) and [docs/adr/](docs/adr/) for the fifteen
 architectural decisions frozen so far.
 
 ## How this repository came to exist (important context)
@@ -212,18 +218,32 @@ dependency-light specifically to make that migration mechanical later.
   server (both in-process and as a real spawned `nova serve` child
   process) and issue real HTTP requests against it, asserting on the real
   JSON responses — not just on the parsed AST. See `examples/api_service.nova`.
-- **245/245 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.14 (ADR-015) implemented** — `API` now accepts `POST` alongside
+  `GET`, and a new `REQUEST AS <DataType>` expression reads the POST
+  request's real JSON body, validated against `<DataType>`'s declared
+  fields (must be present, JS-type-matching, `integer`/`decimal`/`text`/
+  `boolean` only — nested `DATA`/`list`/`record` fields are statically
+  rejected, `E-SEM-043`). `REQUEST` is restricted to a `POST` handler's own
+  body (`E-SEM-042`) — checked soundly, not just per-call, since procedure
+  bodies are analyzed once at their own declaration. A malformed/
+  mismatched body is a real `400` (`E-RUN-008`/`E-RUN-009`); every other
+  runtime error inside a handler stays `500`, unchanged from ADR-014.
+  Verified by actually POSTing real JSON to a real running server (both
+  in-process and via the real spawned `nova serve` CLI) and checking the
+  real response — including that a record created by one POST is visible
+  to a later, separate GET request. See `examples/api_service.nova`.
+- **261/261 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **49/49 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 19 valid programs that must run cleanly, 26
+- **51/51 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 19 valid programs that must run cleanly, 28
   invalid programs that must fail with the exact diagnostic code the spec
   promises, three dedicated `nova build` checks (static, data-bound, and
   interactive — the last one executing real generated JavaScript) that
   inspect real output files, and one dedicated `nova serve` check that
   spawns the real CLI as a live server and issues real HTTP requests
-  against it. This is deliberately the "actual CLI output" level of
-  verification, not just in-process test calls, matching the discipline
-  described in the original chat.
+  (GET and POST both) against it. This is deliberately the "actual CLI
+  output" level of verification, not just in-process test calls, matching
+  the discipline described in the original chat.
 - Every diagnostic in SPECIFICATION.md §11's table is implemented and has
   at least one test or example exercising it.
 
@@ -266,15 +286,22 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   buttons yet, `E-SEM-038`); page-local state is scalar-only (no
   list/record state); no `TRY`/`CATCH` inside a click handler either
   (only `CHANGE` is allowed there at all).
-- `API` supports only the `GET` HTTP method (ADR-014) — no `POST`/`PUT`/
-  `DELETE` yet (no request-body parsing/validation story exists). Routing
-  is exact-match only: no path parameters (`/products/:id`), no
-  query-string parsing. The `ASK`-inside-a-handler check (`E-SEM-041`) is
-  shallow by design: it only inspects a handler's own statements, not
-  procedures it calls — a real, bounded, explicitly-named gap, not a
-  soundness guarantee. `PAGE`/`SERVICE` are still two independent pillars;
-  data-bound `PAGE` (ADR-012) is still a build-time-only snapshot,
-  deliberately not wired up to the live server this milestone adds.
+- `API` supports only `GET` and `POST` (ADR-014/ADR-015) — no `PUT`/
+  `DELETE` yet. Routing is exact-match only: no path parameters
+  (`/products/:id`), no query-string parsing. The `ASK`-inside-a-handler
+  check (`E-SEM-041`) is shallow by design: it only inspects a handler's
+  own statements, not procedures it calls — a real, bounded,
+  explicitly-named gap, not a soundness guarantee (the newer
+  `REQUEST`-outside-`POST` check, `E-SEM-042`, is checked at each
+  procedure's own declaration instead, so it doesn't share this gap).
+  `PAGE`/`SERVICE` are still two independent pillars; data-bound `PAGE`
+  (ADR-012) is still a build-time-only snapshot, deliberately not wired up
+  to the live server ADR-014/015 add.
+- `REQUEST AS <DataType>` (ADR-015) only supports flat, primitive-typed
+  (`integer`/`decimal`/`text`/`boolean`) `DATA` shapes — a field typed as
+  another `DATA` type, `list`, or `record` is a static error (`E-SEM-043`),
+  not yet supported. Extra fields in a POST body are silently ignored, not
+  validated against anything.
 - `SECURITY` is still forward-reserved with no grammar at all.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
@@ -282,14 +309,18 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 ## What's next
 
 **Every milestone in the original roadmap (v0.1 through v0.12) is
-implemented, plus v0.13 (`SERVICE`/`API`, ADR-014) — the first milestone
-past that roadmap.** What's left is, like v0.13 was, explicitly beyond
-what the original chat described, with no surviving detail to reconstruct
-from — genuinely new ground, not a recovery:
+implemented, plus v0.13/v0.14 (`SERVICE`/`API`, ADR-014/ADR-015) — the
+first milestones past that roadmap.** What's left is, like v0.13/v0.14
+were, explicitly beyond what the original chat described, with no
+surviving detail to reconstruct from — genuinely new ground, not a
+recovery:
 
-1. Write verbs on `API` (`POST`/`PUT`/`DELETE`) — v0.13 deliberately
-   deferred these; they need a request-body parsing/validation story
-   against a `DATA` shape that's a real, separate design question.
+1. `PUT`/`DELETE` on `API` — v0.14 added `POST` + `REQUEST AS <DataType>`
+   (validated against a flat, primitive-only `DATA` shape); `PUT` implies
+   "update this existing id" and `DELETE` needs no body at all, each its
+   own real design question ADR-015 deliberately left open. Also still
+   open: nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape, and
+   path parameters/query-string parsing in routing.
 2. Connecting `PAGE` to the live server `SERVICE`/`API` now provides, so
    data-bound `PAGE` (ADR-012) could stop being a build-time-only
    snapshot — today the two pillars are deliberately independent (see
@@ -299,7 +330,7 @@ from — genuinely new ground, not a recovery:
 5. Mobile/desktop targets, native compilation/self-hosting — explicitly
    multi-month-plus territory.
 
-The process discipline that held for 14 milestones and is worth
+The process discipline that held for 15 milestones and is worth
 continuing for anything past this point: **ADR before implementation**
 for any real design decision, smallest-correct-version per milestone
 (resist doing three milestones' worth of surface in one pass), and
@@ -323,7 +354,8 @@ programmatically.
    (009), error handling (010), the static PAGE compiler (011),
    data-bound PAGE (012), interactive PAGE (013) — read the last three in
    particular before touching PAGE further — and the live SERVICE/API
-   HTTP server (014), the first milestone past the original roadmap.
+   HTTP server (014) plus API POST/REQUEST AS (015), the first two
+   milestones past the original roadmap.
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they
