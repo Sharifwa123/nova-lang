@@ -212,6 +212,8 @@ export class Interpreter {
         return; // ADR-005 — no runtime representation; a pure naming layer over `record`
       case "PageDeclaration":
         return; // ADR-011 — inert during `nova run`; compiled by `nova build` instead
+      case "ServiceDeclaration":
+        return; // ADR-014 — inert during `nova run`/`nova build`; served by `nova serve` instead
       case "ReturnStatement": {
         const v = stmt.value ? this.evaluate(stmt.value, env) : NONE;
         throw new ReturnSignal(v);
@@ -278,6 +280,20 @@ export class Interpreter {
     return indexValue.value;
   }
 
+  // Runs `statements` in `env`, returning the value of whichever RETURN
+  // (if any) stops it - NONE if it falls off the end without one. Shared
+  // by callProcedure and invokeApiHandler (ADR-014) so both reuse the
+  // exact same "a statement list run for its RETURN value" control flow.
+  runBlockForValue(statements, env) {
+    try {
+      this.execStatements(statements, env);
+    } catch (e) {
+      if (e instanceof ReturnSignal) return e.value;
+      throw e;
+    }
+    return NONE;
+  }
+
   callProcedure(name, argValues, span) {
     const proc = this.procedures.get(name);
     if (!proc) {
@@ -286,13 +302,18 @@ export class Interpreter {
     if (proc.native) return proc.native(argValues, span); // ADR-007
     const env = this.globalEnv.child(); // §8.3 — parent is global scope, not the call site.
     proc.params.forEach((p, i) => env.defineLocal(p, argValues[i]));
-    try {
-      this.execStatements(proc.body, env);
-    } catch (e) {
-      if (e instanceof ReturnSignal) return e.value;
-      throw e;
-    }
-    return NONE;
+    return this.runBlockForValue(proc.body, env);
+  }
+
+  // ADR-014 — runs one API handler's body for a single HTTP request, fresh
+  // each time (a child of global scope, exactly like a procedure call with
+  // no parameters) but against the SAME globalEnv/store every other
+  // request and the original `nova serve` boot run already share - this
+  // is what makes SAVE/GET inside a handler genuinely live across requests,
+  // unlike PAGE's build-time-only snapshot (ADR-012).
+  invokeApiHandler(statements) {
+    const env = this.globalEnv.child();
+    return this.runBlockForValue(statements, env);
   }
 
   evaluate(expr, env) {

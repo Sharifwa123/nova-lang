@@ -70,6 +70,7 @@ export class Analyzer {
     this.procedures = new Map(); // name -> { arity, node, paramTypes, returnType }
     this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
     this.pages = new Map(); // ADR-011 — route -> PageDeclaration node
+    this.apiRoutes = new Map(); // ADR-014 — "<METHOD> <route>" -> api declaration
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
       this.globalScope.defineLocal(name, type);
@@ -269,7 +270,39 @@ export class Analyzer {
         this.dataTypes.set(name, { node: stmt, fields: null });
       } else if (stmt.kind === "PageDeclaration") {
         this.registerPage(stmt);
+      } else if (stmt.kind === "ServiceDeclaration") {
+        this.registerService(stmt);
       }
+    }
+  }
+
+  // ADR-014 — route validation and method+route uniqueness, checked in
+  // phase 1 exactly like registerPage: neither needs DATA fields resolved.
+  // Body-checking (which does need DATA fields) waits for the main
+  // traversal, same timing ProcedureDeclaration bodies already use.
+  registerService(stmt) {
+    for (const api of stmt.apis) {
+      if (!api.route.startsWith("/")) {
+        err(
+          CODES.INVALID_API_ROUTE,
+          `An API route must start with "/", but got "${api.route}".`,
+          api.routeSpan,
+          null,
+          `Use "/${api.route}" or similar.`
+        );
+      }
+      const key = `${api.method} ${api.route}`;
+      if (this.apiRoutes.has(key)) {
+        err(
+          CODES.DUPLICATE_API_ROUTE,
+          `The route "${api.route}" (${api.method}) is already used by another API.`,
+          api.routeSpan,
+          "Each API endpoint must have a unique method + route combination.",
+          "Use a different route.",
+          [[this.apiRoutes.get(key).routeSpan, "Previous API with this route"]]
+        );
+      }
+      this.apiRoutes.set(key, api);
     }
   }
 
@@ -544,6 +577,104 @@ export class Analyzer {
     }
   }
 
+  // ADR-014 — the one restriction an API handler body has: no ASK,
+  // anywhere in its own statements (not a deep call-graph check through
+  // called procedures - see the ADR's "Known limitation"). ASK blocks on
+  // real stdin (ADR-008); a live HTTP server has no per-request terminal,
+  // so every request would hang forever. Deliberately narrower than
+  // assertNoUnsafeConstructs (ADR-013): everything else - SAVE, GET,
+  // DELETE, procedure calls - is genuine, unrestricted server-side code.
+  assertNoAskInStatements(statements) {
+    for (const stmt of statements) this.assertNoAskInStatement(stmt);
+  }
+
+  assertNoAskInStatement(stmt) {
+    switch (stmt.kind) {
+      case "ShowStatement":
+        this.assertNoAskInExpr(stmt.value);
+        return;
+      case "SetStatement":
+        this.assertNoAskInExpr(stmt.value);
+        return;
+      case "ChangeStatement":
+        for (const idx of stmt.indexPath) this.assertNoAskInExpr(idx);
+        this.assertNoAskInExpr(stmt.value);
+        return;
+      case "IfStatement":
+        for (const branch of stmt.branches) {
+          this.assertNoAskInExpr(branch.condition);
+          this.assertNoAskInStatements(branch.body);
+        }
+        if (stmt.elseBranch) this.assertNoAskInStatements(stmt.elseBranch);
+        return;
+      case "ForEachStatement":
+        this.assertNoAskInExpr(stmt.iterable);
+        this.assertNoAskInStatements(stmt.body);
+        return;
+      case "RepeatStatement":
+        this.assertNoAskInExpr(stmt.count);
+        this.assertNoAskInStatements(stmt.body);
+        return;
+      case "ReturnStatement":
+        if (stmt.value) this.assertNoAskInExpr(stmt.value);
+        return;
+      case "ExpressionStatement":
+        this.assertNoAskInExpr(stmt.expression);
+        return;
+      case "TryStatement":
+        this.assertNoAskInStatements(stmt.tryBody);
+        this.assertNoAskInStatements(stmt.catchBody);
+        return;
+      case "DeleteStatement":
+        this.assertNoAskInExpr(stmt.idExpression);
+        return;
+      default:
+        return; // ProcedureDeclaration/DataDeclaration/PageDeclaration/ServiceDeclaration: not reachable here
+    }
+  }
+
+  assertNoAskInExpr(expr) {
+    switch (expr.kind) {
+      case "AskExpression":
+        err(
+          CODES.API_HANDLER_ASK_NOT_ALLOWED,
+          "ASK cannot be used inside an API handler - a server has no per-request interactive terminal to read from.",
+          expr.span,
+          "ASK blocks on real stdin; inside a request handler that would hang the server on every request against this endpoint.",
+          "Remove ASK, or move this logic somewhere it's called from nova run instead."
+        );
+        return;
+      case "UnaryOp":
+        this.assertNoAskInExpr(expr.operand);
+        return;
+      case "BinaryOp":
+        this.assertNoAskInExpr(expr.left);
+        this.assertNoAskInExpr(expr.right);
+        return;
+      case "FieldAccess":
+        this.assertNoAskInExpr(expr.target);
+        return;
+      case "IndexAccess":
+        this.assertNoAskInExpr(expr.target);
+        this.assertNoAskInExpr(expr.index);
+        return;
+      case "CallExpression":
+        for (const arg of expr.arguments) this.assertNoAskInExpr(arg);
+        return;
+      case "ListLiteral":
+        for (const el of expr.elements) this.assertNoAskInExpr(el);
+        return;
+      case "RecordLiteral":
+        for (const f of expr.fields) this.assertNoAskInExpr(f.value);
+        return;
+      case "SaveExpression":
+        this.assertNoAskInExpr(expr.value);
+        return;
+      default:
+        return; // literals, identifiers, GetExpression - nothing to walk
+    }
+  }
+
   // Phase 2 — every DATA/procedure name is now known, so field and
   // annotation type names can be validated regardless of declaration
   // order, including self- and forward-references (ADR-005).
@@ -780,6 +911,20 @@ export class Analyzer {
         // Already fully validated in registerPage (phase 1) - PAGE is
         // inert during `nova run`, exactly like DATA (ADR-011).
         return;
+
+      case "ServiceDeclaration": {
+        // ADR-014 — an API handler body reuses the exact same machinery a
+        // DO procedure body already has: a child of global scope, RETURN
+        // valid (insideProcedure: true), no declared return type so
+        // definitelyReturns is not required (matches an undeclared-
+        // RETURNS procedure exactly - falls through to NONE/null).
+        for (const api of stmt.apis) {
+          const apiScope = this.globalScope.child();
+          this.checkStatements(api.body, apiScope, { insideProcedure: true, declaredReturnType: null });
+          this.assertNoAskInStatements(api.body);
+        }
+        return;
+      }
 
       case "TryStatement": {
         this.checkStatements(stmt.tryBody, scope.child(), ctx);

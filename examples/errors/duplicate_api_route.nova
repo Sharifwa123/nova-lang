@@ -1,0 +1,9 @@
+# expect: E-SEM-039
+SERVICE
+    API GET "/x"
+        RETURN 1
+    END
+    API GET "/x"
+        RETURN 2
+    END
+END

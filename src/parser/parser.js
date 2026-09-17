@@ -196,6 +196,7 @@ export class Parser {
         case "DELETE": return this.parseDelete();
         case "TRY": return this.parseTry();
         case "PAGE": return this.parsePage();
+        case "SERVICE": return this.parseService();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -533,6 +534,74 @@ export class Parser {
       dataTypeNameSpan: typeTok.span,
       body,
       span: spanOf(forTok.span, end.span),
+    };
+  }
+
+  // ADR-014 — service-declaration ::= "SERVICE" NEWLINE api-declaration* "END"
+  parseService() {
+    const serviceTok = this.expectKeyword("SERVICE");
+    const apis = [];
+    this.skipNewlines();
+    while (!this.checkKeyword("END")) {
+      if (this.atEOF()) this.unclosedBlockError(serviceTok, "SERVICE block");
+      if (!this.checkKeyword("API")) {
+        this.error(
+          CODES.UNEXPECTED_TOKEN,
+          `Expected API, but found ${this.describeToken(this.current())}.`,
+          this.current(),
+          null,
+          "A SERVICE block may only contain API declarations."
+        );
+      }
+      apis.push(this.parseApiDeclaration());
+      this.skipNewlines();
+    }
+    const end = this.expectKeyword("END");
+    return AST.ServiceDeclaration(apis, spanOf(serviceTok.span, end.span));
+  }
+
+  // ADR-014 — api-declaration ::= "API" "GET" string-literal NEWLINE
+  //                                statement* "END"
+  // Only GET is supported so far - the grammar itself only accepts that
+  // literal keyword (see the ADR for why this is a parser restriction, not
+  // a semantic one). The body is an ORDINARY statement block - unlike
+  // WHEN CLICKED (ADR-013), an API handler is deliberately NOT sandboxed.
+  parseApiDeclaration() {
+    const apiTok = this.expectKeyword("API");
+    const methodTok = this.expectKeyword(
+      "GET",
+      'Only GET endpoints are supported so far - write API GET "/route" ... END.'
+    );
+    const routeTok = this.current();
+    if (routeTok.type !== TokenType.STRING) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected a route (a string literal), but found ${this.describeToken(routeTok)}.`,
+        routeTok,
+        null,
+        'API GET must be followed by a route string, e.g. API GET "/products".'
+      );
+    }
+    if (routeTok.value.some((p) => p.kind === "interp")) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        "An API route cannot contain interpolation.",
+        routeTok,
+        null,
+        'Use a plain string, e.g. API GET "/products".'
+      );
+    }
+    const route = routeTok.value.map((p) => p.value).join("");
+    this.advance();
+    const block = this.parseBlockUntil(["END"]);
+    if (block.stoppedAt === "EOF") this.unclosedBlockError(apiTok, "API block");
+    const end = this.expectKeyword("END");
+    return {
+      method: methodTok.value,
+      route,
+      routeSpan: routeTok.span,
+      body: block.statements,
+      span: spanOf(apiTok.span, end.span),
     };
   }
 

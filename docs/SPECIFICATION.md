@@ -1051,3 +1051,91 @@ Everything else in §1–§17 and the v0.2–v0.11 amendments above is
 unchanged. **This completes every milestone named in the original
 roadmap** (v0.1 through v0.12); anything past this point is new ground,
 not a recovery of prior design.
+
+---
+
+## v0.13 Amendments — SERVICE / API: a Live HTTP Server (ADR-014)
+
+Status: Implemented (this repository) — the first milestone genuinely past
+the original roadmap (v0.1–v0.12), with no surviving chat detail to
+reconstruct from at all. See
+[docs/adr/ADR-014-service-api.md](adr/ADR-014-service-api.md) for full
+rationale.
+
+**§2.6 (amended)** — `SERVICE`, `API` move from the forward-reserved list
+into real grammar (`GET` is reused verbatim from ADR-006 for the HTTP
+verb, not a new keyword).
+
+**New grammar**:
+```
+top-level-statement ::= ... (unchanged) | service-declaration
+service-declaration ::= "SERVICE" NEWLINE api-declaration* "END"
+api-declaration      ::= "API" "GET" string-literal NEWLINE statement* "END"
+```
+
+DECISION: smallest correct version — only the `GET` HTTP method is
+supported in v0.13; the grammar itself accepts only that literal keyword
+after `API` (any other word is a plain parse error, not a semantic one —
+there's no partial write-verb support yet to report a nicer diagnostic
+about). Every write verb (`POST`/`PUT`/`DELETE`) needs a request-body
+story that's a genuinely separate design question, deferred exactly the
+way ADR-011 deferred variables out of `PAGE` content until ADR-012.
+
+DECISION: an API route must start with `/` (`E-SEM-040`, the same rule
+ADR-011 gives `PAGE`) and may not contain string interpolation. Two `API`
+declarations may not share the same method+route pair (`E-SEM-039`,
+modeled directly on `DUPLICATE_PAGE_ROUTE`), checked globally across every
+`SERVICE` block in the file — they all end up in one process's routing
+table at `nova serve` time.
+
+DECISION: an API handler's body is an **ordinary** statement block,
+type-checked by reusing the exact same machinery a `DO` procedure body
+already has (a child of global scope, `RETURN` valid, no declared return
+type so `definitelyReturns` is not required — a handler that never hits
+`RETURN` responds with NONE, serialized as JSON `null`). Unlike `WHEN
+CLICKED` (ADR-013), this is deliberately **not** sandboxed: `SAVE`, `GET`,
+`DELETE`, and procedure calls are all genuine, unrestricted server-side
+code, because (unlike a `PAGE` compiled to a stranger's browser) there is
+no new trust boundary being crossed here — this is exactly where
+`SAVE`/`GET`/`DELETE` already run today. The one narrow exception:
+`ASK` is rejected directly inside a handler's own statements (`E-SEM-041`)
+— it blocks on real stdin (ADR-008), and a live server has no per-request
+terminal to read from, so every request would hang forever. This check is
+shallow by design (it does not follow calls into procedures a handler
+invokes) — a real, bounded, and explicitly named limitation, not a silent
+gap (see the ADR).
+
+DECISION: `nova serve <file>.nova [port]` (default port 3000) runs the
+file's top-level statements once, silently — identical to `nova build`'s
+existing "populate SAVE'd data" step (ADR-011/012) — and then starts a
+real Node `http` server (`src/apiserver/serve.js`, zero dependencies) that
+keeps the **same interpreter instance**, and so the same persistence
+store, alive across every subsequent request. A `SAVE` from one request is
+visible to a `GET` in the next, and every request after that, for as long
+as the process runs — this is what makes "live" genuinely honest, in
+contrast to `PAGE`/`nova build`'s one-shot, build-time-only snapshot
+(ADR-012), which this ADR leaves completely unchanged. Routing is a flat,
+exact-match `"<METHOD> <route>"` table (no path parameters, no
+query-string parsing — deferred). An unmatched method+path is a `404`
+with a JSON error body. A handler that raises a genuine NOVA runtime error
+is a `500` with the diagnostic message as JSON, without crashing the
+server; any other exception (an actual interpreter bug) is left to
+propagate, matching `TryStatement`'s own existing rule (ADR-010).
+
+DECISION: a NOVA runtime value becomes a JSON HTTP response body via a
+small, total mapping (`integer`/`decimal`/`text`/`boolean` pass through as
+the matching JS type; `list` maps element-wise; `record` maps its fields,
+recursively; `none` becomes JSON `null`) — the JSON-audience analogue of
+`display()` (§14).
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-039 | Duplicate API method+route |
+| E-SEM-040 | API route not starting with "/" |
+| E-SEM-041 | ASK used directly inside an API handler body |
+
+Everything else in §1–§17 and the v0.2–v0.12 amendments above is
+unchanged — `PAGE`/`nova build` in particular are completely untouched by
+this milestone.

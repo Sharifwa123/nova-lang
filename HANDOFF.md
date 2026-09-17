@@ -5,15 +5,16 @@
 Read this section first; the rest of the file is the detailed history and
 rationale behind it.
 
-**State**: v0.1 through v0.12 are done — the entire originally-planned
-roadmap. 229 unit tests, 44 examples verified through the *real* CLI (not
-just in-process calls), 13 ADRs, zero npm dependencies, MIT licensed.
+**State**: v0.1 through v0.12 (the entire originally-planned roadmap) plus
+v0.13 — the first milestone past it: `SERVICE`/`API`, a real, live HTTP
+server. 245 unit tests, 49 examples verified through the *real* CLI (not
+just in-process calls), 14 ADRs, zero npm dependencies, MIT licensed.
 Verify it yourself before doing anything else:
 ```bash
 git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
 node test/run.js && node test/run-examples.js
 ```
-If that's not 229/229 and 44/44, something's wrong with *your*
+If that's not 245/245 and 49/49, something's wrong with *your*
 environment, not the code — stop and figure out why before writing
 anything new.
 
@@ -45,13 +46,17 @@ anything new.
 
 **What's actually next**, per this file's own roadmap section below — and
 this is the part with *zero* surviving detail to recover, genuinely new
-ground:
-1. A server/API pillar (`API`/`SERVICE` are still forward-reserved, no
-   grammar). This is the natural next step — `PAGE` has client-side state
-   now but nothing to talk to server-side, and it's what would make
-   "data-bound PAGE" stop being a build-time-only snapshot.
-2. Security basics (`SECURITY`, also reserved).
-3. Durable persistence (currently in-memory only).
+ground (v0.13's `SERVICE`/`API` was the first piece of this list; see
+ADR-014):
+1. Write verbs on `API` (`POST`/`PUT`/`DELETE`) — v0.13 only supports
+   `GET`; a write verb needs a request-body story (parsing, validation
+   against a `DATA` shape) that ADR-014 deliberately deferred.
+2. Connecting `PAGE` to the live server `SERVICE`/`API` now provides —
+   today they're two independent pillars; data-bound `PAGE` (ADR-012) is
+   still a build-time-only snapshot, on purpose (see ADR-014's Problem
+   section for why the two weren't merged in one pass).
+3. Security basics (`SECURITY`, still reserved).
+4. Durable persistence (currently in-memory only).
 
 **One specific warning**: the `PAGE` compiler (ADR-011/012/013) is the
 most structurally novel part of this codebase — first compilation target
@@ -67,7 +72,7 @@ purpose) isn't obvious from the code alone.
 NOVA is a programming language meant to eventually unify core logic, data
 modeling, UI, and APIs into one language — see
 [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding spec (now
-covering v0.1 through v0.12) and [docs/adr/](docs/adr/) for the thirteen
+covering v0.1 through v0.13) and [docs/adr/](docs/adr/) for the fourteen
 architectural decisions frozen so far.
 
 ## How this repository came to exist (important context)
@@ -189,16 +194,36 @@ dependency-light specifically to make that migration mechanical later.
   and calling the button functions programmatically — a real onclick →
   state mutation → `render()` → DOM-text-update chain, not a string
   match. See `examples/interactive_counter.nova`.
-- **229/229 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **v0.13 (ADR-014) implemented** — the first milestone past the original
+  roadmap. `SERVICE`/`API` compile to a real, live HTTP server: `nova
+  serve <file>.nova [port]` runs the file once (silently, populating any
+  `SAVE`'d data, exactly like `nova build`'s existing model) and then keeps
+  that same interpreter — and its persistence store — alive across every
+  subsequent request, so `SAVE`/`GET`/`DELETE` inside a handler are
+  genuinely live (a `SAVE` in one request is visible to a `GET` in the
+  next), unlike `PAGE`'s build-time-only snapshot, which this milestone
+  leaves completely untouched. Only `GET` endpoints are supported so far;
+  a handler body is ordinary, **unrestricted** server-side NOVA code
+  (deliberately *not* sandboxed the way `WHEN CLICKED` is — see the ADR
+  for why those are different problems), with one narrow exception: `ASK`
+  is rejected directly inside a handler (`E-SEM-041`) since it would block
+  the server on real stdin per request. Verified the same way ADR-013's
+  own generated-JS check was: real end-to-end tests actually start the
+  server (both in-process and as a real spawned `nova serve` child
+  process) and issue real HTTP requests against it, asserting on the real
+  JSON responses — not just on the parsed AST. See `examples/api_service.nova`.
+- **245/245 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **44/44 examples verified through the real CLI** (`node
-  test/run-examples.js`) — 18 valid programs that must run cleanly, 23
+- **49/49 examples verified through the real CLI** (`node
+  test/run-examples.js`) — 19 valid programs that must run cleanly, 26
   invalid programs that must fail with the exact diagnostic code the spec
-  promises, plus three dedicated `nova build` checks (static, data-bound,
-  and interactive — the last one executing real generated JavaScript)
-  that inspect real output files. This is deliberately the "actual CLI
-  output" level of verification, not just in-process test calls, matching
-  the discipline described in the original chat.
+  promises, three dedicated `nova build` checks (static, data-bound, and
+  interactive — the last one executing real generated JavaScript) that
+  inspect real output files, and one dedicated `nova serve` check that
+  spawns the real CLI as a live server and issues real HTTP requests
+  against it. This is deliberately the "actual CLI output" level of
+  verification, not just in-process test calls, matching the discipline
+  described in the original chat.
 - Every diagnostic in SPECIFICATION.md §11's table is implemented and has
   at least one test or example exercising it.
 
@@ -207,6 +232,8 @@ Verify it yourself:
 node test/run.js
 node test/run-examples.js
 node src/cli.js build examples/interactive_counter.nova && cat examples/dist/counter.html
+node src/cli.js serve examples/api_service.nova 3000 &
+sleep 1 && curl http://localhost:3000/products && kill %1
 ```
 
 ## Known, deliberate limitations (not bugs)
@@ -238,29 +265,41 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 - `BUTTON` is top-level only (not inside `FOR EACH` — no per-record
   buttons yet, `E-SEM-038`); page-local state is scalar-only (no
   list/record state); no `TRY`/`CATCH` inside a click handler either
-  (only `CHANGE` is allowed there at all). No server (`API`/`SECURITY`)
-  yet at all — everything interactive is purely client-side.
+  (only `CHANGE` is allowed there at all).
+- `API` supports only the `GET` HTTP method (ADR-014) — no `POST`/`PUT`/
+  `DELETE` yet (no request-body parsing/validation story exists). Routing
+  is exact-match only: no path parameters (`/products/:id`), no
+  query-string parsing. The `ASK`-inside-a-handler check (`E-SEM-041`) is
+  shallow by design: it only inspects a handler's own statements, not
+  procedures it calls — a real, bounded, explicitly-named gap, not a
+  soundness guarantee. `PAGE`/`SERVICE` are still two independent pillars;
+  data-bound `PAGE` (ADR-012) is still a build-time-only snapshot,
+  deliberately not wired up to the live server this milestone adds.
+- `SECURITY` is still forward-reserved with no grammar at all.
 - Numbers use JS's native `number` type, not true arbitrary precision
   (flagged as an explicit open question in SPECIFICATION.md §16).
 
 ## What's next
 
-**Every milestone in the original roadmap (v0.1 through v0.12) is now
-implemented.** What's left is explicitly beyond what the original chat
-described, with no surviving detail to reconstruct from at all — genuinely
-new ground, not a recovery:
+**Every milestone in the original roadmap (v0.1 through v0.12) is
+implemented, plus v0.13 (`SERVICE`/`API`, ADR-014) — the first milestone
+past that roadmap.** What's left is, like v0.13 was, explicitly beyond
+what the original chat described, with no surviving detail to reconstruct
+from — genuinely new ground, not a recovery:
 
-1. A minimal server/API pillar (`API`/`SERVICE`, still forward-reserved
-   keywords with no grammar) — the natural next step now that `PAGE` has
-   client-side state but nothing to talk to server-side. This is where
-   "data-bound `PAGE`" (ADR-012) stops being a build-time-only static-site
-   snapshot and could become genuinely live.
-2. Security basics (`SECURITY`, also still reserved).
-3. Durable (file-backed, not in-memory-only) persistence.
-4. Mobile/desktop targets, native compilation/self-hosting — explicitly
+1. Write verbs on `API` (`POST`/`PUT`/`DELETE`) — v0.13 deliberately
+   deferred these; they need a request-body parsing/validation story
+   against a `DATA` shape that's a real, separate design question.
+2. Connecting `PAGE` to the live server `SERVICE`/`API` now provides, so
+   data-bound `PAGE` (ADR-012) could stop being a build-time-only
+   snapshot — today the two pillars are deliberately independent (see
+   ADR-014's Problem section for why they weren't merged in one pass).
+3. Security basics (`SECURITY`, still forward-reserved).
+4. Durable (file-backed, not in-memory-only) persistence.
+5. Mobile/desktop targets, native compilation/self-hosting — explicitly
    multi-month-plus territory.
 
-The process discipline that held for 13 milestones and is worth
+The process discipline that held for 14 milestones and is worth
 continuing for anything past this point: **ADR before implementation**
 for any real design decision, smallest-correct-version per milestone
 (resist doing three milestones' worth of surface in one pass), and
@@ -283,7 +322,8 @@ programmatically.
    standard library (007), `ASK` input (008), list indexing/mutation
    (009), error handling (010), the static PAGE compiler (011),
    data-bound PAGE (012), interactive PAGE (013) — read the last three in
-   particular before touching PAGE further.
+   particular before touching PAGE further — and the live SERVICE/API
+   HTTP server (014), the first milestone past the original roadmap.
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

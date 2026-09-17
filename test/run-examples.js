@@ -3,7 +3,7 @@
 // exercises. This is the "actual nova run output" level of verification the
 // original design discipline insisted on (see HANDOFF.md).
 import { readdirSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
@@ -183,6 +183,69 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
   } else {
     console.log(`  FAIL interactive_counter.nova build/execute (exit ${result.status})`);
     console.log(indent(result.stderr || result.stdout));
+    failed++;
+  }
+}
+
+// ADR-014 — SERVICE/API: `nova serve` is a long-running process, not a
+// one-shot command, so it needs its own real end-to-end check: spawn the
+// actual CLI as a real child process (not the in-process interpreter),
+// wait for it to report it's actually listening, then issue real HTTP
+// requests against it (Node's global fetch) and assert on the real JSON
+// responses - the same "actual CLI output" standard as `nova build`
+// above, extended here to a live server instead of generated files.
+console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) ==");
+{
+  const source = path.join(examplesDir, "api_service.nova");
+  let ok = false;
+  let failureDetail = "";
+  const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    let stdoutBuf = "";
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timed out waiting for the server to report it's listening.")), 5000);
+      child.stdout.on("data", (chunk) => {
+        stdoutBuf += chunk.toString();
+        const m = stdoutBuf.match(/listening on http:\/\/localhost:(\d+)/);
+        if (m) {
+          clearTimeout(timer);
+          resolve(Number(m[1]));
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error(`Server process exited early (code ${code}).`));
+      });
+    });
+
+    const hello = await fetch(`http://localhost:${port}/hello`);
+    const helloBody = await hello.json();
+    const products = await fetch(`http://localhost:${port}/products`);
+    const productsBody = await products.json();
+    const missing = await fetch(`http://localhost:${port}/nope`);
+
+    ok =
+      hello.status === 200 &&
+      helloBody === "Hello from NOVA" &&
+      products.status === 200 &&
+      Array.isArray(productsBody) &&
+      productsBody.length === 2 &&
+      productsBody[0].name === "Widget" &&
+      productsBody[0].price === 9.99 &&
+      missing.status === 404;
+    if (!ok) failureDetail = `hello=${JSON.stringify(helloBody)} products=${JSON.stringify(productsBody)} missing.status=${missing.status}`;
+  } catch (e) {
+    failureDetail = String(e.stack ?? e);
+  } finally {
+    child.kill();
+  }
+
+  if (ok) {
+    console.log(`  OK   api_service.nova serve -> real HTTP responses verified`);
+    passed++;
+  } else {
+    console.log(`  FAIL api_service.nova serve`);
+    console.log(indent(failureDetail));
     failed++;
   }
 }

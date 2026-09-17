@@ -5,17 +5,20 @@ instructions to a computer while remaining precise enough for a real
 compiler pipeline — one language meant to eventually span core logic, data,
 UI, and APIs, instead of stitching together a different language per layer.
 
-This repository implements **v0.1 through v0.12** — every milestone in the
-original design roadmap: lexer → parser → AST → semantic analyzer →
-tree-walking interpreter, covering the core language (SHOW/SET/CHANGE/IF/
-FOR EACH/REPEAT/DO/RETURN), lists/records, typed procedures, `DATA` named
-types, in-memory persistence (`SAVE`/`GET`/`DELETE`), a small stdlib,
-`ASK` input, list indexing/mutation, `TRY`/`CATCH` error handling, and a
-`PAGE` compiler (`nova build`) spanning static HTML, data-bound content,
-and real client-side interactivity (`BUTTON`/`WHEN CLICKED` compiled to
-JavaScript). See [HANDOFF.md](HANDOFF.md) for how this repo came to exist
-and what's next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for
-the binding language specification.
+This repository implements **v0.1 through v0.13**: v0.1–v0.12 is every
+milestone in the original design roadmap — lexer → parser → AST →
+semantic analyzer → tree-walking interpreter, covering the core language
+(SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
+procedures, `DATA` named types, in-memory persistence (`SAVE`/`GET`/
+`DELETE`), a small stdlib, `ASK` input, list indexing/mutation,
+`TRY`/`CATCH` error handling, and a `PAGE` compiler (`nova build`)
+spanning static HTML, data-bound content, and real client-side
+interactivity (`BUTTON`/`WHEN CLICKED` compiled to JavaScript). v0.13 is
+the first milestone past that original roadmap: `SERVICE`/`API` compile to
+a real, live HTTP server (`nova serve`) sharing one persistence store
+across every request. See [HANDOFF.md](HANDOFF.md) for how this repo came
+to exist and what's next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md)
+for the binding language specification.
 
 ## Try it
 
@@ -34,6 +37,8 @@ node src/cli.js run examples/error_handling.nova
 node src/cli.js build examples/website.nova              # static PAGE
 node src/cli.js build examples/data_bound_website.nova   # data-bound PAGE
 node src/cli.js build examples/interactive_counter.nova  # interactive PAGE (real JS)
+node src/cli.js serve examples/api_service.nova 3000      # live HTTP server (SERVICE/API)
+# in another terminal: curl http://localhost:3000/hello && curl http://localhost:3000/products
 ```
 
 ```nova
@@ -70,7 +75,8 @@ src/
   diagnostics/  the WHAT/WHERE/WHY/HOW error model, shared by every stage
   stdlib/       built-in procedures (UPPER, LENGTH, ...)
   pagecompiler/ PAGE declarations -> static HTML (used by `nova build`)
-  cli.js        `nova run <file>.nova` / `nova build <file>.nova`
+  apiserver/    SERVICE/API declarations -> a live HTTP server (used by `nova serve`)
+  cli.js        `nova run` / `nova build` / `nova serve <file>.nova [port]`
   nova.js       ties the pipeline together (compile / runSource)
 docs/
   SPECIFICATION.md   the binding v0.1 language spec

@@ -1,15 +1,18 @@
 #!/usr/bin/env node
-// NOVA CLI — `nova run <file>.nova` / `nova build <file>.nova` (ADR-011)
+// NOVA CLI — `nova run <file>.nova` / `nova build <file>.nova` (ADR-011) /
+// `nova serve <file>.nova [port]` (ADR-014)
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { runSource, compile } from "./nova.js";
 import { Interpreter } from "./interpreter/interpreter.js";
 import { compileProgram } from "./pagecompiler/compile.js";
+import { startServer } from "./apiserver/serve.js";
 import { formatDiagnostic, NovaError } from "./diagnostics/diagnostic.js";
 
 function usage() {
   console.error("Usage: nova run <file>.nova");
   console.error("       nova build <file>.nova   (compiles PAGE declarations to dist/*.html)");
+  console.error("       nova serve <file>.nova [port]   (starts a live HTTP server for SERVICE/API, default port 3000)");
   process.exit(2);
 }
 
@@ -80,12 +83,46 @@ function buildCommand(filePath) {
   }
 }
 
+// ADR-014 — `nova serve`: like buildCommand, compiles and runs the file's
+// top-level statements once, silently, so SAVE calls populate the store -
+// but then, instead of writing files and exiting, starts a real HTTP
+// server and keeps this SAME interpreter (and its store) alive across
+// every request, so SAVE/GET inside an API handler are genuinely live.
+function serveCommand(filePath, portArg) {
+  const source = readSourceOrExit(filePath);
+  let program;
+  try {
+    program = compile(source, filePath, {});
+  } catch (e) {
+    if (e instanceof NovaError) {
+      console.error(formatDiagnostic(e.diagnostic, source, filePath));
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  const interpreter = new Interpreter(program, {}, { write: () => {}, writePrompt: () => {} });
+  try {
+    interpreter.run();
+  } catch (e) {
+    if (e instanceof NovaError) {
+      console.error(formatDiagnostic(e.diagnostic, source, filePath));
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  const port = portArg !== undefined ? Number(portArg) : 3000;
+  startServer(interpreter, program, { port });
+}
+
 function main() {
-  const [, , command, filePath] = process.argv;
-  if (!filePath || (command !== "run" && command !== "build")) usage();
+  const [, , command, filePath, extra] = process.argv;
+  if (!filePath || !["run", "build", "serve"].includes(command)) usage();
 
   if (command === "run") runCommand(filePath);
-  else buildCommand(filePath);
+  else if (command === "build") buildCommand(filePath);
+  else serveCommand(filePath, extra);
 }
 
 main();

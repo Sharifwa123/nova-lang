@@ -38,6 +38,11 @@ export const TryStatement = (tryBody, errorVar, catchBody, span) =>
 export const PageDeclaration = (route, routeSpan, elements, span) =>
   node("PageDeclaration", { route, routeSpan, elements }, span);
 
+// ADR-014 — `apis` is [{ method: 'GET', route: string, routeSpan,
+// body: Statement[], span }] — plain objects, the same shape convention
+// PageDeclaration.elements already uses.
+export const ServiceDeclaration = (apis, span) => node("ServiceDeclaration", { apis }, span);
+
 export const IntegerLiteral = (value, span) => node("IntegerLiteral", { value }, span);
 export const DecimalLiteral = (value, span) => node("DecimalLiteral", { value }, span);
 export const StringLiteral = (parts, span) => node("StringLiteral", { parts }, span);
