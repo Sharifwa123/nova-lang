@@ -9,14 +9,14 @@ rationale behind it.
 v0.13/v0.14 — the first milestones past it: `SERVICE`/`API`, a real, live
 HTTP server, with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>`
 (v0.14, reading/validating the real JSON request body) both implemented.
-261 unit tests, 51 examples verified through the *real* CLI (not just
+265 unit tests, 52 examples verified through the *real* CLI (not just
 in-process calls), 15 ADRs, zero npm dependencies, MIT licensed. Verify it
 yourself before doing anything else:
 ```bash
 git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
 node test/run.js && node test/run-examples.js
 ```
-If that's not 261/261 and 51/51, something's wrong with *your*
+If that's not 265/265 and 52/52, something's wrong with *your*
 environment, not the code — stop and figure out why before writing
 anything new.
 
@@ -218,6 +218,13 @@ dependency-light specifically to make that migration mechanical later.
   server (both in-process and as a real spawned `nova serve` child
   process) and issue real HTTP requests against it, asserting on the real
   JSON responses — not just on the parsed AST. See `examples/api_service.nova`.
+  **Two bugs found in code review, fixed before the PR merged**: a
+  `SERVICE` nested inside `IF`/`DO`/etc. compiled cleanly but silently
+  registered no route at all (every request just 404'd, no compile-time
+  signal why) — now rejected at compile time (`E-SEM-044`); and route
+  matching didn't decode percent-encoding, so a route literal with
+  non-ASCII/reserved characters could never actually be reached by a real
+  client. See ADR-014's "Post-launch fixes" section.
 - **v0.14 (ADR-015) implemented** — `API` now accepts `POST` alongside
   `GET`, and a new `REQUEST AS <DataType>` expression reads the POST
   request's real JSON body, validated against `<DataType>`'s declared
@@ -232,9 +239,9 @@ dependency-light specifically to make that migration mechanical later.
   in-process and via the real spawned `nova serve` CLI) and checking the
   real response — including that a record created by one POST is visible
   to a later, separate GET request. See `examples/api_service.nova`.
-- **261/261 unit tests passing** (`node test/run.js`) — lexer, parser,
+- **265/265 unit tests passing** (`node test/run.js`) — lexer, parser,
   analyzer, interpreter, and diagnostic formatting.
-- **51/51 examples verified through the real CLI** (`node
+- **52/52 examples verified through the real CLI** (`node
   test/run-examples.js`) — 19 valid programs that must run cleanly, 28
   invalid programs that must fail with the exact diagnostic code the spec
   promises, three dedicated `nova build` checks (static, data-bound, and

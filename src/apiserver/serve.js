@@ -72,10 +72,23 @@ async function readJsonBody(req) {
 
 async function handleRequest(req, res, interpreter, routes) {
   const url = new URL(req.url, "http://localhost");
-  const api = routes.get(`${req.method} ${url.pathname}`);
+  // Declared routes are stored under their literal, already-decoded text
+  // (e.g. `API GET "/café"` registers the key "GET /café"), but a real
+  // client sends non-ASCII/reserved characters percent-encoded on the wire
+  // ("/caf%C3%A9"), and url.pathname does NOT decode that back - so the
+  // lookup key has to be decoded to match. A malformed percent-sequence
+  // (invalid input, not this endpoint's fault) just falls through to the
+  // ordinary 404 below rather than crashing the request.
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    pathname = url.pathname;
+  }
+  const api = routes.get(`${req.method} ${pathname}`);
   if (!api) {
     res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: `No API endpoint for ${req.method} ${url.pathname}` }));
+    res.end(JSON.stringify({ error: `No API endpoint for ${req.method} ${pathname}` }));
     return;
   }
   const requestBody = await readJsonBody(req);

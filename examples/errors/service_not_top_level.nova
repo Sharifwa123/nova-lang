@@ -1,0 +1,8 @@
+# expect: E-SEM-044
+DO setup
+    SERVICE
+        API GET "/nested"
+            RETURN "hi"
+        END
+    END
+END

@@ -299,3 +299,71 @@ SHOW "still runs"`);
   interpreter.run();
   assertEqual(output, ["still runs"]);
 });
+
+// ---- review fixes: nested SERVICE, and percent-encoded routes ----
+
+test("v0.13: a SERVICE nested inside DO is rejected at compile time (E-SEM-044), not silently accepted as an unreachable route", () => {
+  // Before this check: registerService (phase 1) only walks genuine
+  // top-level statements, so a nested SERVICE compiled cleanly but
+  // collectApiRoutes (src/apiserver/serve.js) found no route for it at
+  // all - `nova serve` would boot fine and every request against it would
+  // just 404, with zero compile-time signal about why.
+  assertThrows(
+    () =>
+      compile(`DO setup
+    SERVICE
+        API GET "/nested"
+            RETURN "hi"
+        END
+    END
+END`),
+    (e) => assertEqual(e.diagnostic.code, CODES.SERVICE_NOT_TOP_LEVEL)
+  );
+});
+
+test("v0.13: a SERVICE nested inside IF is also rejected (E-SEM-044)", () => {
+  assertThrows(
+    () =>
+      compile(`IF TRUE
+    SERVICE
+        API GET "/x"
+            RETURN 1
+        END
+    END
+END`),
+    (e) => assertEqual(e.diagnostic.code, CODES.SERVICE_NOT_TOP_LEVEL)
+  );
+});
+
+test("v0.13: a real percent-encoded HTTP request matches a route literal with non-ASCII characters", async () => {
+  const { server, port } = await bootTestServer(`SERVICE
+    API GET "/café"
+        RETURN "bonjour"
+    END
+END`);
+  try {
+    // A real client percent-encodes non-ASCII path characters on the wire
+    // ("/caf%C3%A9") - url.pathname does NOT decode that back, so the
+    // route table has to be looked up against the decoded form to match
+    // the literal, already-decoded route NOVA parsed from source.
+    const res = await fetch(`http://localhost:${port}/caf%C3%A9`);
+    assertEqual(res.status, 200);
+    assertEqual(await res.json(), "bonjour");
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("v0.13: a malformed percent-encoded request path falls through to an ordinary 404, not a crash", async () => {
+  const { server, port } = await bootTestServer(`SERVICE
+    API GET "/x"
+        RETURN 1
+    END
+END`);
+  try {
+    const res = await fetch(`http://localhost:${port}/caf%zz`);
+    assertEqual(res.status, 404);
+  } finally {
+    await closeServer(server);
+  }
+});

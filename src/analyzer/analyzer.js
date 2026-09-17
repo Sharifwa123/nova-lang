@@ -77,6 +77,7 @@ export class Analyzer {
     this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
     this.pages = new Map(); // ADR-011 — route -> PageDeclaration node
     this.apiRoutes = new Map(); // ADR-014 — "<METHOD> <route>" -> api declaration
+    this.topLevelServices = new Set(); // which ServiceDeclaration nodes were seen at genuine top level (see checkStatement)
     this.currentApiMethod = null; // ADR-015 — the API method whose body is currently being checked, or null
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
@@ -278,6 +279,7 @@ export class Analyzer {
       } else if (stmt.kind === "PageDeclaration") {
         this.registerPage(stmt);
       } else if (stmt.kind === "ServiceDeclaration") {
+        this.topLevelServices.add(stmt);
         this.registerService(stmt);
       }
     }
@@ -920,6 +922,24 @@ export class Analyzer {
         return;
 
       case "ServiceDeclaration": {
+        // A SERVICE nested inside IF/DO/FOR EACH/REPEAT/TRY parses fine
+        // (parseStatement doesn't distinguish position) but registerService
+        // (phase 1) only ever sees genuine top-level ones - collectApiRoutes
+        // (src/apiserver/serve.js) walks program.statements the same way,
+        // so a nested SERVICE would otherwise silently register no route
+        // at all: `nova serve` boots clean and every request 404s, with no
+        // signal at compile time about why. Reject it here instead, the
+        // same "must be top level" treatment PAGE_TITLE_STYLE_NOT_TOP_LEVEL
+        // already gives TITLE/STYLE/SET inside a PAGE-level FOR EACH.
+        if (!this.topLevelServices.has(stmt)) {
+          err(
+            CODES.SERVICE_NOT_TOP_LEVEL,
+            "SERVICE must be declared at the top level of a file, not nested inside IF/DO/FOR EACH/REPEAT/TRY.",
+            stmt.span,
+            "A SERVICE nested inside a conditional or procedure body would never be reachable by nova serve - only top-level SERVICE blocks are compiled into the server's routing table.",
+            "Move this SERVICE block to the top level of the file."
+          );
+        }
         // ADR-014 — an API handler body reuses the exact same machinery a
         // DO procedure body already has: a child of global scope, RETURN
         // valid (insideProcedure: true), no declared return type so

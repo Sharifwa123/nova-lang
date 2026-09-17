@@ -223,3 +223,32 @@ runtime errors: a real but bounded gap, not a silent one.
 - `PAGE`/`nova build` are completely unchanged by this ADR — the two
   pillars (static/data-bound UI vs. a live server) stay independent until
   a later milestone deliberately connects them.
+
+## Post-launch fixes (found in code review, before this ADR's PR merged)
+
+Two real bugs surfaced by automated review of the initial implementation,
+fixed before merge rather than left as follow-ups:
+
+1. **Nested `SERVICE` silently registered no route.** `parseStatement`
+   doesn't distinguish nesting position, so `SERVICE` inside `IF`/`DO`/
+   `FOR EACH`/`REPEAT`/`TRY` parsed and type-checked without error — but
+   `registerService` (phase 1) and `collectApiRoutes`
+   (`src/apiserver/serve.js`) both only ever walk genuine top-level
+   statements. A nested `SERVICE` compiled cleanly, `nova serve` booted
+   without complaint, and every request against it just 404'd — a
+   confusing trap with zero compile-time signal about why. Fixed by
+   `E-SEM-044`: the analyzer now tracks exactly which `ServiceDeclaration`
+   nodes it saw at genuine top level (phase 1) and rejects any other one
+   it encounters during the main traversal, the same "must be top level"
+   treatment `PAGE_TITLE_STYLE_NOT_TOP_LEVEL` already gives `TITLE`/
+   `STYLE`/`SET` inside a `PAGE`-level `FOR EACH` — not a new kind of
+   check, the established one applied to a fourth construct.
+2. **Route matching didn't decode percent-encoding.** A route literal is
+   stored under its literal, already-decoded text (`API GET "/café"`
+   registers the key `"GET /café"`), but a real HTTP client percent-encodes
+   non-ASCII/reserved path characters on the wire (`/caf%C3%A9`), and
+   `url.pathname` does not decode that back — so such a route could never
+   actually be reached by a standards-compliant client. Fixed by decoding
+   the incoming request's pathname (`decodeURIComponent`) before the
+   routing-table lookup; a malformed percent-sequence in the request
+   falls through to the ordinary 404 rather than crashing the request.

@@ -1135,6 +1135,22 @@ New diagnostics:
 | E-SEM-039 | Duplicate API method+route |
 | E-SEM-040 | API route not starting with "/" |
 | E-SEM-041 | ASK used directly inside an API handler body |
+| E-SEM-044 | SERVICE declared somewhere other than a file's top level |
+
+**Post-launch fix**: a `SERVICE` nested inside `IF`/`DO`/`FOR EACH`/
+`REPEAT`/`TRY` parsed and analyzed without error, but `collectApiRoutes`
+only ever walks genuine top-level statements — the nested block compiled
+into no route at all, so `nova serve` booted clean and every request
+against it silently 404'd, with no compile-time signal about why.
+`E-SEM-044` closes this: `SERVICE` is now rejected wherever it isn't a
+true top-level declaration, the same "must be top level" treatment
+`PAGE_TITLE_STYLE_NOT_TOP_LEVEL` already gives `TITLE`/`STYLE`/`SET`
+inside a `PAGE`-level `FOR EACH`. Also fixed alongside it: request-path
+matching now decodes percent-encoding before the routing-table lookup — a
+route literal with non-ASCII or reserved characters (e.g. `API GET
+"/café"`) previously could never match a real client's request, since a
+standards-compliant client percent-encodes such characters on the wire
+(`/caf%C3%A9`) and `url.pathname` does not decode that back.
 
 Everything else in §1–§17 and the v0.2–v0.12 amendments above is
 unchanged — `PAGE`/`nova build` in particular are completely untouched by
