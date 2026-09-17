@@ -1,5 +1,67 @@
 # HANDOFF — read this first
 
+## Briefing for the next developer
+
+Read this section first; the rest of the file is the detailed history and
+rationale behind it.
+
+**State**: v0.1 through v0.12 are done — the entire originally-planned
+roadmap. 229 unit tests, 44 examples verified through the *real* CLI (not
+just in-process calls), 13 ADRs, zero npm dependencies, MIT licensed.
+Verify it yourself before doing anything else:
+```bash
+git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
+node test/run.js && node test/run-examples.js
+```
+If that's not 229/229 and 44/44, something's wrong with *your*
+environment, not the code — stop and figure out why before writing
+anything new.
+
+**The process discipline that got this here, non-negotiable:**
+1. **ADR before code**, for any real design decision — not after. Look at
+   `docs/adr/` for the pattern: problem, options considered, decision with
+   *reasoning* (not just what), consequences. ADR-006's and ADR-011's
+   provenance notes are worth reading specifically — they show how to be
+   honest in the doc itself about what's recovered vs. invented (see
+   "How this repository came to exist" below for why that distinction
+   matters here specifically).
+2. **Smallest correct version per milestone.** Every ADR in this repo
+   explicitly defers things — read the "DEFERRED" callouts before
+   assuming a feature doesn't exist by accident. Don't bundle three
+   milestones into one PR because they're adjacent.
+3. **Verify through the real CLI, not just unit tests**, for anything with
+   genuine I/O or generated output. ADR-013 is the clearest example: it
+   doesn't assert the generated HTML contains a substring, it *executes*
+   the generated JavaScript in a real JS context and calls the button
+   functions programmatically. A passing unit test can still hide a bug a
+   live run catches immediately — this codebase has already found two
+   real bugs that way.
+4. **Reuse existing mechanisms before inventing new syntax.** `CHANGE` for
+   mutation was reused three separate times (variables, list elements,
+   page-local state) instead of growing new keywords. `FOR EACH`/`GET`
+   were reused for data-bound `PAGE` instead of a parallel loop construct.
+   If you're about to add a new keyword, check whether an existing one
+   already means what you need first.
+
+**What's actually next**, per this file's own roadmap section below — and
+this is the part with *zero* surviving detail to recover, genuinely new
+ground:
+1. A server/API pillar (`API`/`SERVICE` are still forward-reserved, no
+   grammar). This is the natural next step — `PAGE` has client-side state
+   now but nothing to talk to server-side, and it's what would make
+   "data-bound PAGE" stop being a build-time-only snapshot.
+2. Security basics (`SECURITY`, also reserved).
+3. Durable persistence (currently in-memory only).
+
+**One specific warning**: the `PAGE` compiler (ADR-011/012/013) is the
+most structurally novel part of this codebase — first compilation target
+other than the interpreter, `nova run` vs `nova build` executing
+genuinely different halves of the same file. Read those three ADRs before
+touching it; the reasoning for *why* click handlers are restricted the
+way they are (two separate checks — type correctness via ordinary
+`infer()`, sandboxing via a dedicated structural walk — kept apart on
+purpose) isn't obvious from the code alone.
+
 ## What this project is
 
 NOVA is a programming language meant to eventually unify core logic, data
