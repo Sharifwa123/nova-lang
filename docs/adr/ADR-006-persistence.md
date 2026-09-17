@@ -1,23 +1,12 @@
 # ADR-006: Persistence (SAVE / GET / DELETE)
 
-**Provenance note**, unlike ADR-001–005: the original design chat's own
-exact syntax for this milestone did not survive in a form this repo could
-recover verbatim (see HANDOFF.md) — only the roadmap line "persistence
-(`SAVE`/`GET`/`DELETE`, in-memory first)" and the fact that `GET ...
-WHERE` filtering was explicitly deferred *past* this milestone. Everything
-below is this repository's own design, done in the same ADR-first,
-smallest-correct-version discipline as ADR-001–005, using `SAVE`/`GET`/
-`DELETE` — the exact three keywords the original reserved back in §2.6 for
-this purpose — and building on `DATA` (ADR-005) as the natural shape for a
-persisted record.
-
 ## Problem
 NOVA has named record shapes (`DATA`) but no way to keep any value alive
-past a single `nova run` process. The original vision's own working
-examples used `SAVE`/`GET`/`DELETE` as the persistence verbs; v0.5 gives
-them real, minimal, in-memory semantics — durable (file-backed) storage is
-explicitly a later milestone (the original roadmap's own next line after
-this one).
+past a single `nova run` process. `SAVE`/`GET`/`DELETE` were reserved as
+the persistence verbs from early on; v0.5 gives them real, minimal,
+in-memory semantics — durable (file-backed) storage and `GET ... WHERE`
+filtering are both intentionally deferred to a later milestone, not
+oversights.
 
 ## Decision
 
@@ -64,12 +53,11 @@ literals rather than quietly breaking it the moment persistence exists.
 Practically, this means `GET Product` returns a `list` of bare `Product`
 records with **no id attached** — DEFERRED, explicitly: a future indexed
 fetch (`GET Product WHERE id == x`, or a form that returns id+record
-pairs) is the natural next step once there's real demand for it, matching
-the original roadmap's own note that `WHERE` filtering was deferred past
-this milestone. For v0.5, the realistic pattern is "keep the id `SAVE`
-handed you, use it later" — which is exactly how a "delete this row"
-button (the concrete case the original roadmap flagged as the next thing
-needed after basic persistence) actually works: the id came from
+pairs) is the natural next step once there's real demand for it — `WHERE`
+filtering is intentionally deferred past this milestone. For v0.5, the
+realistic pattern is "keep the id `SAVE` handed you, use it later" —
+which is exactly how a "delete this row" button (the concrete next step
+after basic persistence) actually works: the id came from
 rendering a list that was itself built right after saving, not from
 re-deriving it out of thin air.
 
@@ -108,8 +96,8 @@ default and matches how most real deletion APIs behave.
 
 ### GET returns everything, in insertion order
 DECISION: `GET TypeName` returns *every* currently-saved record of that
-type, oldest first. No filtering yet (`WHERE`, deferred per the original
-roadmap) — this is the smallest useful slice: list rendering (`FOR EACH
+type, oldest first. No filtering yet (`WHERE`, intentionally deferred) —
+this is the smallest useful slice: list rendering (`FOR EACH
 product IN GET Product ... END`) already works today with zero further
 grammar.
 

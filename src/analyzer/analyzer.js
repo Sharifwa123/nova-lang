@@ -40,6 +40,12 @@ function staticLiteralType(expr) {
 // (checked separately, since they're user-declared) extend this set.
 const PRIMITIVE_TYPE_NAMES = new Set(["integer", "decimal", "text", "boolean", "list", "record"]);
 
+// ADR-015 — the subset of PRIMITIVE_TYPE_NAMES a REQUEST AS <Type> field
+// may be: a JSON request body has a direct, unambiguous mapping only for
+// these four; a nested DATA type, list, or record would need a recursive
+// (and, for list, an element-typed) validation story NOVA doesn't have yet.
+const REQUEST_SCALAR_TYPES = new Set(["integer", "decimal", "text", "boolean"]);
+
 // ADR-004 — conservative, sound "does this statement list definitely
 // return a value on every path" check. See docs/adr/ADR-004 for the exact
 // rules and why loops never count.
@@ -70,6 +76,9 @@ export class Analyzer {
     this.procedures = new Map(); // name -> { arity, node, paramTypes, returnType }
     this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
     this.pages = new Map(); // ADR-011 — route -> PageDeclaration node
+    this.apiRoutes = new Map(); // ADR-014 — "<METHOD> <route>" -> api declaration
+    this.topLevelServices = new Set(); // which ServiceDeclaration nodes were seen at genuine top level (see checkStatement)
+    this.currentApiMethod = null; // ADR-015 — the API method whose body is currently being checked, or null
     this.globalScope = new Scope();
     for (const [name, type] of Object.entries(hostGlobals)) {
       this.globalScope.defineLocal(name, type);
@@ -269,7 +278,40 @@ export class Analyzer {
         this.dataTypes.set(name, { node: stmt, fields: null });
       } else if (stmt.kind === "PageDeclaration") {
         this.registerPage(stmt);
+      } else if (stmt.kind === "ServiceDeclaration") {
+        this.topLevelServices.add(stmt);
+        this.registerService(stmt);
       }
+    }
+  }
+
+  // ADR-014 — route validation and method+route uniqueness, checked in
+  // phase 1 exactly like registerPage: neither needs DATA fields resolved.
+  // Body-checking (which does need DATA fields) waits for the main
+  // traversal, same timing ProcedureDeclaration bodies already use.
+  registerService(stmt) {
+    for (const api of stmt.apis) {
+      if (!api.route.startsWith("/")) {
+        err(
+          CODES.INVALID_API_ROUTE,
+          `An API route must start with "/", but got "${api.route}".`,
+          api.routeSpan,
+          null,
+          `Use "/${api.route}" or similar.`
+        );
+      }
+      const key = `${api.method} ${api.route}`;
+      if (this.apiRoutes.has(key)) {
+        err(
+          CODES.DUPLICATE_API_ROUTE,
+          `The route "${api.route}" (${api.method}) is already used by another API.`,
+          api.routeSpan,
+          "Each API endpoint must have a unique method + route combination.",
+          "Use a different route.",
+          [[this.apiRoutes.get(key).routeSpan, "Previous API with this route"]]
+        );
+      }
+      this.apiRoutes.set(key, api);
     }
   }
 
@@ -544,6 +586,104 @@ export class Analyzer {
     }
   }
 
+  // ADR-014 — the one restriction an API handler body has: no ASK,
+  // anywhere in its own statements (not a deep call-graph check through
+  // called procedures - see the ADR's "Known limitation"). ASK blocks on
+  // real stdin (ADR-008); a live HTTP server has no per-request terminal,
+  // so every request would hang forever. Deliberately narrower than
+  // assertNoUnsafeConstructs (ADR-013): everything else - SAVE, GET,
+  // DELETE, procedure calls - is genuine, unrestricted server-side code.
+  assertNoAskInStatements(statements) {
+    for (const stmt of statements) this.assertNoAskInStatement(stmt);
+  }
+
+  assertNoAskInStatement(stmt) {
+    switch (stmt.kind) {
+      case "ShowStatement":
+        this.assertNoAskInExpr(stmt.value);
+        return;
+      case "SetStatement":
+        this.assertNoAskInExpr(stmt.value);
+        return;
+      case "ChangeStatement":
+        for (const idx of stmt.indexPath) this.assertNoAskInExpr(idx);
+        this.assertNoAskInExpr(stmt.value);
+        return;
+      case "IfStatement":
+        for (const branch of stmt.branches) {
+          this.assertNoAskInExpr(branch.condition);
+          this.assertNoAskInStatements(branch.body);
+        }
+        if (stmt.elseBranch) this.assertNoAskInStatements(stmt.elseBranch);
+        return;
+      case "ForEachStatement":
+        this.assertNoAskInExpr(stmt.iterable);
+        this.assertNoAskInStatements(stmt.body);
+        return;
+      case "RepeatStatement":
+        this.assertNoAskInExpr(stmt.count);
+        this.assertNoAskInStatements(stmt.body);
+        return;
+      case "ReturnStatement":
+        if (stmt.value) this.assertNoAskInExpr(stmt.value);
+        return;
+      case "ExpressionStatement":
+        this.assertNoAskInExpr(stmt.expression);
+        return;
+      case "TryStatement":
+        this.assertNoAskInStatements(stmt.tryBody);
+        this.assertNoAskInStatements(stmt.catchBody);
+        return;
+      case "DeleteStatement":
+        this.assertNoAskInExpr(stmt.idExpression);
+        return;
+      default:
+        return; // ProcedureDeclaration/DataDeclaration/PageDeclaration/ServiceDeclaration: not reachable here
+    }
+  }
+
+  assertNoAskInExpr(expr) {
+    switch (expr.kind) {
+      case "AskExpression":
+        err(
+          CODES.API_HANDLER_ASK_NOT_ALLOWED,
+          "ASK cannot be used inside an API handler - a server has no per-request interactive terminal to read from.",
+          expr.span,
+          "ASK blocks on real stdin; inside a request handler that would hang the server on every request against this endpoint.",
+          "Remove ASK, or move this logic somewhere it's called from nova run instead."
+        );
+        return;
+      case "UnaryOp":
+        this.assertNoAskInExpr(expr.operand);
+        return;
+      case "BinaryOp":
+        this.assertNoAskInExpr(expr.left);
+        this.assertNoAskInExpr(expr.right);
+        return;
+      case "FieldAccess":
+        this.assertNoAskInExpr(expr.target);
+        return;
+      case "IndexAccess":
+        this.assertNoAskInExpr(expr.target);
+        this.assertNoAskInExpr(expr.index);
+        return;
+      case "CallExpression":
+        for (const arg of expr.arguments) this.assertNoAskInExpr(arg);
+        return;
+      case "ListLiteral":
+        for (const el of expr.elements) this.assertNoAskInExpr(el);
+        return;
+      case "RecordLiteral":
+        for (const f of expr.fields) this.assertNoAskInExpr(f.value);
+        return;
+      case "SaveExpression":
+        this.assertNoAskInExpr(expr.value);
+        return;
+      default:
+        return; // literals, identifiers, GetExpression - nothing to walk
+    }
+  }
+
   // Phase 2 — every DATA/procedure name is now known, so field and
   // annotation type names can be validated regardless of declaration
   // order, including self- and forward-references (ADR-005).
@@ -780,6 +920,48 @@ export class Analyzer {
         // Already fully validated in registerPage (phase 1) - PAGE is
         // inert during `nova run`, exactly like DATA (ADR-011).
         return;
+
+      case "ServiceDeclaration": {
+        // A SERVICE nested inside IF/DO/FOR EACH/REPEAT/TRY parses fine
+        // (parseStatement doesn't distinguish position) but registerService
+        // (phase 1) only ever sees genuine top-level ones - collectApiRoutes
+        // (src/apiserver/serve.js) walks program.statements the same way,
+        // so a nested SERVICE would otherwise silently register no route
+        // at all: `nova serve` boots clean and every request 404s, with no
+        // signal at compile time about why. Reject it here instead, the
+        // same "must be top level" treatment PAGE_TITLE_STYLE_NOT_TOP_LEVEL
+        // already gives TITLE/STYLE/SET inside a PAGE-level FOR EACH.
+        if (!this.topLevelServices.has(stmt)) {
+          err(
+            CODES.SERVICE_NOT_TOP_LEVEL,
+            "SERVICE must be declared at the top level of a file, not nested inside IF/DO/FOR EACH/REPEAT/TRY.",
+            stmt.span,
+            "A SERVICE nested inside a conditional or procedure body would never be reachable by nova serve - only top-level SERVICE blocks are compiled into the server's routing table.",
+            "Move this SERVICE block to the top level of the file."
+          );
+        }
+        // ADR-014 — an API handler body reuses the exact same machinery a
+        // DO procedure body already has: a child of global scope, RETURN
+        // valid (insideProcedure: true), no declared return type so
+        // definitelyReturns is not required (matches an undeclared-
+        // RETURNS procedure exactly - falls through to NONE/null).
+        for (const api of stmt.apis) {
+          const apiScope = this.globalScope.child();
+          // ADR-015 — tracks which API method's body is currently being
+          // checked, so REQUEST (below, in infer()) can be statically
+          // restricted to POST handlers only. A single instance field, not
+          // threaded through infer()'s signature - restored afterward so
+          // it's null again outside any API body (top level, DO procedures).
+          this.currentApiMethod = api.method;
+          try {
+            this.checkStatements(api.body, apiScope, { insideProcedure: true, declaredReturnType: null });
+            this.assertNoAskInStatements(api.body);
+          } finally {
+            this.currentApiMethod = null;
+          }
+        }
+        return;
+      }
 
       case "TryStatement": {
         this.checkStatements(stmt.tryBody, scope.child(), ctx);
@@ -1030,6 +1212,46 @@ export class Analyzer {
       case "AskExpression": {
         this.infer(expr.prompt, scope); // any type is fine, display()-ed like SHOW
         return "text";
+      }
+
+      case "RequestExpression": {
+        // ADR-015 — REQUEST is only meaningful (and only ever populated)
+        // inside a POST handler's own body - not a GET handler, not a
+        // DO procedure another handler happens to call (ProcedureDeclaration
+        // bodies are checked once, at their own declaration, never
+        // re-entered from a call site, so this check is fully sound).
+        if (this.currentApiMethod !== "POST") {
+          err(
+            CODES.REQUEST_OUTSIDE_POST_HANDLER,
+            "REQUEST can only be used inside an API POST handler's body.",
+            expr.span,
+            "A GET handler has no request body, and REQUEST is not visible from a DO procedure another handler happens to call - only its own POST handler's body.",
+            "Move this into an API POST ... END handler, or remove it."
+          );
+        }
+        if (!this.dataTypes.has(expr.typeName)) {
+          err(
+            CODES.UNKNOWN_DATA_TYPE_IN_GET,
+            `"${expr.typeName}" is not a DATA type.`,
+            expr.typeNameSpan,
+            null,
+            `Declare it first with DATA ${expr.typeName} ... END, or check the spelling.`
+          );
+        }
+        const dataType = this.dataTypes.get(expr.typeName);
+        for (const field of dataType.fields) {
+          if (!REQUEST_SCALAR_TYPES.has(field.type)) {
+            err(
+              CODES.REQUEST_TYPE_UNSUPPORTED_FIELD,
+              `REQUEST AS ${expr.typeName} requires every field to be integer/decimal/text/boolean, but "${field.name}" is ${describeType(field.type)}.`,
+              expr.typeNameSpan,
+              "REQUEST does not support nested DATA/list/record fields yet.",
+              null,
+              [[dataType.node.name.span, `${expr.typeName} is declared here`]]
+            );
+          }
+        }
+        return expr.typeName;
       }
 
       default:

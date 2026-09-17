@@ -1,8 +1,7 @@
 # v0.7 (ADR-008): ASK reads one line of real, synchronous input per call.
 # Run this one directly to try it interactively:
 #   node src/cli.js run examples/ask.nova
-# Or piped (this is also how test/run-examples.js verifies it, matching
-# the original chat's own "printf ... | nova run ..." verification):
+# Or piped (this is also how test/run-examples.js verifies it):
 #   printf "Ada\n7\n" | node src/cli.js run examples/ask.nova
 
 SET name = ASK "What is your name? "

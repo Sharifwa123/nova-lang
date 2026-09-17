@@ -5,11 +5,10 @@ Scope: Language core only — the lexer, parser, AST, semantic analyzer, and
 tree-walking interpreter for the Milestone-1 surface, plus ADR-002's `CHANGE`
 keyword, which was adopted as part of v0.1 before implementation began.
 
-This document is a reconstruction, from the original design chat's own
-verbatim text, of the specification that was frozen before any code was
-written. See [docs/reference/raw-chat-transcript-partial.txt](reference/raw-chat-transcript-partial.txt)
-and the ADRs in [docs/adr/](adr/) for the full rationale behind each decision.
-Everything marked `DECISION` below is binding on this implementation.
+This document is the specification that was frozen before any code was
+written. See the ADRs in [docs/adr/](adr/) for the full rationale behind
+each decision. Everything marked `DECISION` below is binding on this
+implementation.
 
 ## 0. Document Conventions
 
@@ -74,7 +73,7 @@ AND   OR   NOT
 
 DECISION — forward keyword reservation: the following are reserved but carry
 **no grammar** in v0.1. Using them as identifiers is a lexical/semantic error
-today, protecting the extension points named in the original brief:
+today, protecting the extension points named in §15 below:
 ```
 DATA   PAGE   SCREEN   API   SERVICE   SECURITY   WHEN
 USE   GO   TO   CREATE   GET   SAVE   DELETE   STYLE
@@ -622,10 +621,7 @@ Everything else in §1–§17 and the v0.2/v0.3 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-006-persistence.md](adr/ADR-006-persistence.md) for full
-rationale. **Provenance note**: unlike v0.1–v0.4, the original chat's exact
-syntax for this milestone did not survive verbatim — this design is this
-repository's own, using the `SAVE`/`GET`/`DELETE` keywords the original
-reserved for exactly this purpose, in the same ADR-first discipline.
+rationale.
 
 **§2.6 (amended)** — `SAVE`, `GET`, `DELETE` move from forward-reserved
 into real grammar.
@@ -654,7 +650,7 @@ preserved).
 DECISION: `GET TypeName` returns every currently-saved record of that
 type, oldest first, as a `list` — no `id` attached, no filtering yet
 (`E-SEM-023` if `TypeName` isn't a known `DATA` type). `WHERE`-style
-filtering is explicitly deferred, same as the original roadmap's own note.
+filtering is intentionally deferred.
 
 DECISION: `DELETE TypeName idExpr` is **idempotent** — removing an id
 that's already gone is a silent no-op, not an error (`E-SEM-024` for an
@@ -686,11 +682,7 @@ unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-007-standard-library.md](adr/ADR-007-standard-library.md) for
-full rationale. **Provenance note**: the original chat's exact stdlib
-surface didn't survive verbatim; `UPPER` is preserved from a concrete
-detail that did survive (it's named twice in the original's own bug-fix
-narrative), the rest is this repository's own small, deliberately narrow
-choice.
+full rationale.
 
 Six built-ins, called with **exactly** the same syntax as a `DO` procedure
 — no separate "builtin call" form:
@@ -730,10 +722,7 @@ Everything else in §1–§17 and the v0.2–v0.5 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-008-ask-input.md](adr/ADR-008-ask-input.md) for full
-rationale. **Provenance note**: this is the last milestone whose exact
-syntax and keyword survived directly in the original chat's own summary
-text — `SET name = ASK "prompt "`, verified via canned input queues *and*
-real piped stdin (`printf ... | nova run ...`), both reproduced here.
+rationale.
 
 **New grammar**: `ask-expression ::= "ASK" expression`. New keyword `ASK`.
 
@@ -771,9 +760,7 @@ Everything else in §1–§17 and the v0.2–v0.6 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-009-list-indexing-mutation.md](adr/ADR-009-list-indexing-mutation.md)
-for full rationale. **Provenance note**: only the roadmap line "list
-indexing/mutation" survived from the original chat; the syntax is this
-repository's own design.
+for full rationale.
 
 **§5.1 (amended)** — postfix `[expression]` generalizes the same
 mechanism `.field` already uses (ADR-003): it follows *any* primary, and
@@ -828,8 +815,7 @@ Everything else in §1–§17 and the v0.2–v0.7 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-010-error-handling.md](adr/ADR-010-error-handling.md) for
-full rationale. **Provenance note**: only the roadmap line "error handling
-(`TRY`/catch-style)" survived from the original chat.
+full rationale.
 
 **New grammar**: `try-statement ::= "TRY" block "CATCH" identifier block
 "END"`. New keywords `TRY`, `CATCH` (`CATCH` is mandatory — no bare `TRY`).
@@ -868,13 +854,7 @@ Everything else in §1–§17 and the v0.2–v0.8 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-011-static-page-compiler.md](adr/ADR-011-static-page-compiler.md)
-for full rationale. **Provenance note**: this is the first milestone with
-genuine invention rather than reconstruction — only the roadmap's
-three-step split (static → data-bound → interactive UI), the reserved
-keywords `PAGE`/`STYLE`, and one confirmed detail (a `PAGE` block
-containing `STYLE` and `BUTTON` and `WHEN`) survived from the original
-chat's very first message, which also named this exact area *"the single
-hardest architectural problem in this whole spec."*
+for full rationale.
 
 **§2.6 (amended)** — `PAGE`, `STYLE` move from forward-reserved into real
 grammar. New keywords: `TITLE`, `HEADING`, `TEXT`.
@@ -936,8 +916,7 @@ Everything else in §1–§17 and the v0.2–v0.9 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-012-data-bound-pages.md](adr/ADR-012-data-bound-pages.md)
-for full rationale. **Provenance note**: only the roadmap line survived;
-design is this repository's own.
+for full rationale.
 
 **§ADR-011 grammar (amended)** — `page-element` gains a recursive
 `FOR EACH` variant:
@@ -989,13 +968,7 @@ unchanged.
 Status: Implemented (this repository) — **the last originally-planned
 milestone**. See
 [docs/adr/ADR-013-interactive-pages.md](adr/ADR-013-interactive-pages.md)
-for full rationale. **Provenance note**: unlike ADR-011/012, real detail
-survived here — the original chat's own summary confirmed the exact
-keywords `BUTTON`/`WHEN clicked`, a "page-local state" concept, the
-`SAVE`/`GET`/`ASK`/call restriction on click handlers, and its
-verification method (execute the generated JavaScript, not just diff the
-HTML). Grammar and codegen below are this repository's own reconstruction
-from that description.
+for full rationale.
 
 **New grammar**:
 ```
@@ -1032,9 +1005,9 @@ DECISION: `nova build` emits one `<script>` per interactive page — a
 `state` object, a `render()` updating every state-bound element's
 `textContent` (never `innerHTML`, so no HTML-escaping is needed for these
 updates specifically), and one named function per `BUTTON`. Verification
-matches the original's own approach directly: tests execute the generated
-script against a DOM stub and call the button functions programmatically,
-asserting on the resulting state and DOM text — not a string match.
+executes the generated script against a DOM stub and calls the button
+functions programmatically, asserting on the resulting state and DOM
+text — not a string match.
 
 New diagnostics:
 
@@ -1048,6 +1021,173 @@ New diagnostics:
 | E-SEM-038 | BUTTON used inside FOR EACH (not yet supported) |
 
 Everything else in §1–§17 and the v0.2–v0.11 amendments above is
-unchanged. **This completes every milestone named in the original
-roadmap** (v0.1 through v0.12); anything past this point is new ground,
-not a recovery of prior design.
+unchanged. **This completes every milestone in the v0.1–v0.12 roadmap.**
+
+---
+
+## v0.13 Amendments — SERVICE / API: a Live HTTP Server (ADR-014)
+
+Status: Implemented (this repository) — the first milestone past the
+v0.1–v0.12 roadmap. See
+[docs/adr/ADR-014-service-api.md](adr/ADR-014-service-api.md) for full
+rationale.
+
+**§2.6 (amended)** — `SERVICE`, `API` move from the forward-reserved list
+into real grammar (`GET` is reused verbatim from ADR-006 for the HTTP
+verb, not a new keyword).
+
+**New grammar**:
+```
+top-level-statement ::= ... (unchanged) | service-declaration
+service-declaration ::= "SERVICE" NEWLINE api-declaration* "END"
+api-declaration      ::= "API" "GET" string-literal NEWLINE statement* "END"
+```
+
+DECISION: smallest correct version — only the `GET` HTTP method is
+supported in v0.13; the grammar itself accepts only that literal keyword
+after `API` (any other word is a plain parse error, not a semantic one —
+there's no partial write-verb support yet to report a nicer diagnostic
+about). Every write verb (`POST`/`PUT`/`DELETE`) needs a request-body
+story that's a genuinely separate design question, deferred exactly the
+way ADR-011 deferred variables out of `PAGE` content until ADR-012.
+
+DECISION: an API route must start with `/` (`E-SEM-040`, the same rule
+ADR-011 gives `PAGE`) and may not contain string interpolation. Two `API`
+declarations may not share the same method+route pair (`E-SEM-039`,
+modeled directly on `DUPLICATE_PAGE_ROUTE`), checked globally across every
+`SERVICE` block in the file — they all end up in one process's routing
+table at `nova serve` time.
+
+DECISION: an API handler's body is an **ordinary** statement block,
+type-checked by reusing the exact same machinery a `DO` procedure body
+already has (a child of global scope, `RETURN` valid, no declared return
+type so `definitelyReturns` is not required — a handler that never hits
+`RETURN` responds with NONE, serialized as JSON `null`). Unlike `WHEN
+CLICKED` (ADR-013), this is deliberately **not** sandboxed: `SAVE`, `GET`,
+`DELETE`, and procedure calls are all genuine, unrestricted server-side
+code, because (unlike a `PAGE` compiled to a stranger's browser) there is
+no new trust boundary being crossed here — this is exactly where
+`SAVE`/`GET`/`DELETE` already run today. The one narrow exception:
+`ASK` is rejected directly inside a handler's own statements (`E-SEM-041`)
+— it blocks on real stdin (ADR-008), and a live server has no per-request
+terminal to read from, so every request would hang forever. This check is
+shallow by design (it does not follow calls into procedures a handler
+invokes) — a real, bounded, and explicitly named limitation, not a silent
+gap (see the ADR).
+
+DECISION: `nova serve <file>.nova [port]` (default port 3000) runs the
+file's top-level statements once, silently — identical to `nova build`'s
+existing "populate SAVE'd data" step (ADR-011/012) — and then starts a
+real Node `http` server (`src/apiserver/serve.js`, zero dependencies) that
+keeps the **same interpreter instance**, and so the same persistence
+store, alive across every subsequent request. A `SAVE` from one request is
+visible to a `GET` in the next, and every request after that, for as long
+as the process runs — this is what makes "live" genuinely honest, in
+contrast to `PAGE`/`nova build`'s one-shot, build-time-only snapshot
+(ADR-012), which this ADR leaves completely unchanged. Routing is a flat,
+exact-match `"<METHOD> <route>"` table (no path parameters, no
+query-string parsing — deferred). An unmatched method+path is a `404`
+with a JSON error body. A handler that raises a genuine NOVA runtime error
+is a `500` with the diagnostic message as JSON, without crashing the
+server; any other exception (an actual interpreter bug) is left to
+propagate, matching `TryStatement`'s own existing rule (ADR-010).
+
+DECISION: a NOVA runtime value becomes a JSON HTTP response body via a
+small, total mapping (`integer`/`decimal`/`text`/`boolean` pass through as
+the matching JS type; `list` maps element-wise; `record` maps its fields,
+recursively; `none` becomes JSON `null`) — the JSON-audience analogue of
+`display()` (§14).
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-039 | Duplicate API method+route |
+| E-SEM-040 | API route not starting with "/" |
+| E-SEM-041 | ASK used directly inside an API handler body |
+| E-SEM-044 | SERVICE declared somewhere other than a file's top level |
+
+**Post-launch fix**: a `SERVICE` nested inside `IF`/`DO`/`FOR EACH`/
+`REPEAT`/`TRY` parsed and analyzed without error, but `collectApiRoutes`
+only ever walks genuine top-level statements — the nested block compiled
+into no route at all, so `nova serve` booted clean and every request
+against it silently 404'd, with no compile-time signal about why.
+`E-SEM-044` closes this: `SERVICE` is now rejected wherever it isn't a
+true top-level declaration, the same "must be top level" treatment
+`PAGE_TITLE_STYLE_NOT_TOP_LEVEL` already gives `TITLE`/`STYLE`/`SET`
+inside a `PAGE`-level `FOR EACH`. Also fixed alongside it: request-path
+matching now decodes percent-encoding before the routing-table lookup — a
+route literal with non-ASCII or reserved characters (e.g. `API GET
+"/café"`) previously could never match a real client's request, since a
+standards-compliant client percent-encodes such characters on the wire
+(`/caf%C3%A9`) and `url.pathname` does not decode that back.
+
+Everything else in §1–§17 and the v0.2–v0.12 amendments above is
+unchanged — `PAGE`/`nova build` in particular are completely untouched by
+this milestone.
+
+---
+
+## v0.14 Amendments — API POST and REQUEST AS: Reading the Request Body (ADR-015)
+
+Status: Implemented (this repository) — continues directly from ADR-014's
+own explicitly-deferred write-verb work. See
+[docs/adr/ADR-015-api-post-request-body.md](adr/ADR-015-api-post-request-body.md)
+for full rationale.
+
+**§2.6 (amended)** — three new keywords: `POST`, `REQUEST`, `AS` (none
+were previously forward-reserved — the same "introduce a genuinely new
+keyword when needed" precedent ADR-013 set with `BUTTON`/`CLICKED`).
+
+**New grammar**:
+```
+api-declaration ::= "API" ("GET"|"POST") string-literal NEWLINE
+                     statement* "END"
+primary         ::= ... | "REQUEST" "AS" identifier
+```
+
+DECISION: `API` now accepts `POST` alongside `GET` (still only those two —
+`PUT`/`DELETE` remain deferred, each raising its own distinct design
+question). `REQUEST AS <DataType>` is a new expression that evaluates to
+the current POST request's JSON body, validated against `<DataType>`'s
+declared fields — the same "does this value match this `DATA` shape"
+question `checkRecordLiteralAgainstDataType` (ADR-005) already answers for
+a record literal, applied to a value only known at request time instead of
+written in the source file. Its static type is `<DataType>` itself, so
+`SAVE`/`RETURN` afterward work unchanged.
+
+DECISION: `REQUEST` is valid only lexically inside a `POST` handler's own
+body — not a `GET` handler, not a `DO` procedure another handler calls,
+not a file's top level (`E-SEM-042`). Because `ProcedureDeclaration`
+bodies are analyzed exactly once, at their own declaration, never
+re-entered from a call site, this restriction is fully sound (unlike
+ADR-014's shallow, explicitly-limited `ASK` check).
+
+DECISION: every field of `<DataType>` used with `REQUEST AS` must be
+`integer`/`decimal`/`text`/`boolean` (`E-SEM-043`) — a nested `DATA` type,
+`list`, or `record` field would need a recursive (and, for `list`, an
+element-typed) validation story out of scope here, deferred the same way
+ADR-011 deferred variables out of `PAGE` content until ADR-012.
+
+DECISION: at runtime, the request body must be a JSON object matching
+every declared field's presence and JS type (`E-RUN-008` if it isn't an
+object at all; `E-RUN-009` naming the specific missing/mismatched field).
+Extra fields beyond the `DATA` type's own are silently ignored — more
+forgiving than `RecordLiteral`'s exact-match rule, since a request body
+comes from a client NOVA doesn't control, unlike a literal the developer
+wrote. `E-RUN-008`/`E-RUN-009` specifically map to HTTP `400` (the
+client's fault), unlike every other runtime error reaching `nova serve`
+(`500`, unchanged from ADR-014).
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-042 | REQUEST used outside an API POST handler's own body |
+| E-SEM-043 | REQUEST AS a DATA type with a non-integer/decimal/text/boolean field |
+| E-RUN-008 | POST request body is not a JSON object |
+| E-RUN-009 | POST request body is missing a field, or a field's type doesn't match |
+
+Everything else in §1–§17 and the v0.2–v0.13 amendments above is
+unchanged — `API GET` and `PAGE`/`nova build` in particular are completely
+untouched by this milestone.

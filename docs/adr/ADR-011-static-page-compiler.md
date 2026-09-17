@@ -1,21 +1,14 @@
 # ADR-011: PAGE — a Static HTML Compiler Target
 
-**Provenance note**: this is where genuine invention starts. The original
-chat's *very first message* — before any code existed — flagged this
-exact area as the hardest problem in the whole spec: *"PAGE/SCREEN/API/
-SERVICE/DATA as top-level declarations sharing one language is the single
-hardest architectural problem in this whole spec... NOVA needs an explicit
-answer here, not 'the compiler figures it out.'"* That critique, the
-roadmap's three-step split (static UI → data-bound UI → interactive UI),
-and the reserved keywords `PAGE`/`STYLE` (plus one confirmed detail: a
-`PAGE` block was described as containing `STYLE` and `BUTTON` and `WHEN`)
-are everything that survived. The element vocabulary, grammar, and
-compilation strategy below are this repository's own design, scoped
-deliberately small for exactly the reason the original critique named:
-promising more than a genuinely safe answer for the client/server boundary
-would be scope collapse waiting to happen.
-
 ## Problem
+`PAGE`/`SCREEN`/`API`/`SERVICE`/`DATA` as top-level declarations sharing
+one language is one of the hardest architectural problems in the whole
+spec — NOVA needs an explicit answer for how they compose, not "the
+compiler figures it out." The plan here is a deliberate three-step split
+(static UI → data-bound UI → interactive UI), each milestone scoped small
+on purpose: promising more than a genuinely safe answer for the
+client/server boundary would be scope collapse waiting to happen.
+
 Every NOVA program so far is a script: `nova run` lexes, parses, analyzes,
 and interprets it, end to end. `PAGE` needs to produce something
 fundamentally different — a static artifact (HTML) — not a value or a
@@ -31,9 +24,9 @@ roadmap's own three steps, and matters for the same reason ADR-001 and
 ADR-003 kept early milestones narrow: `PAGE` reading live data and `PAGE`
 handling clicks are each a real design problem in their own right (the
 clicks one especially — restricting what a click handler can touch is
-exactly the "PAGE safely calling into backend logic" concern the original
-critique raised). Solving all three at once would repeat the original's
-own named mistake.
+exactly the "PAGE safely calling into backend logic" concern named
+above). Solving all three at once would risk exactly that scope
+collapse.
 
 ### Grammar
 ```
@@ -64,9 +57,8 @@ command, `nova build <file>.nova`, is what reads `PAGE` declarations and
 emits HTML files (to a `dist/` directory next to the source file). This
 means one `.nova` file can hold both a runnable script and page content
 side by side — no second file extension, no second language — which is
-the actual, concrete form of "PAGE/DATA sharing one language" the
-original vision asked for, kept honest by *not* pretending they share one
-execution model too.
+the concrete form of "PAGE/DATA sharing one language," kept honest by
+*not* pretending they share one execution model too.
 
 ### Content must be a static literal — enforced, not just documented
 DECISION: every `page-element`'s expression must be a **literal**

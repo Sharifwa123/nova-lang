@@ -3,7 +3,7 @@
 // exercises. This is the "actual nova run output" level of verification the
 // original design discipline insisted on (see HANDOFF.md).
 import { readdirSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
@@ -28,7 +28,7 @@ for (const f of validFiles) {
   const full = path.join(examplesDir, f);
   // ADR-008 — a companion `<name>.stdin` file, if present, is piped in as
   // real stdin (not the in-process canned-input path test/v0.7-ask.test.js
-  // exercises) — matching the original chat's own dual verification.
+  // exercises) — dual verification, matching ADR-008's own discipline.
   const stdinPath = full.replace(/\.nova$/, ".stdin");
   let stdinInput;
   try {
@@ -137,9 +137,8 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
 
 // ADR-013 — interactive PAGE: real CLI build, then EXECUTE the generated
 // <script> against a DOM stub and call the button functions
-// programmatically, exactly the original chat's own verification
-// approach - a string match on the HTML cannot catch a codegen bug
-// (wrong operator, render() never called); actually running it can.
+// programmatically - a string match on the HTML cannot catch a codegen
+// bug (wrong operator, render() never called); actually running it can.
 {
   const source = path.join(examplesDir, "interactive_counter.nova");
   const distDir = path.join(examplesDir, "dist");
@@ -183,6 +182,92 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
   } else {
     console.log(`  FAIL interactive_counter.nova build/execute (exit ${result.status})`);
     console.log(indent(result.stderr || result.stdout));
+    failed++;
+  }
+}
+
+// ADR-014 — SERVICE/API: `nova serve` is a long-running process, not a
+// one-shot command, so it needs its own real end-to-end check: spawn the
+// actual CLI as a real child process (not the in-process interpreter),
+// wait for it to report it's actually listening, then issue real HTTP
+// requests against it (Node's global fetch) and assert on the real JSON
+// responses - the same "actual CLI output" standard as `nova build`
+// above, extended here to a live server instead of generated files.
+console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) ==");
+{
+  const source = path.join(examplesDir, "api_service.nova");
+  let ok = false;
+  let failureDetail = "";
+  const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    let stdoutBuf = "";
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timed out waiting for the server to report it's listening.")), 5000);
+      child.stdout.on("data", (chunk) => {
+        stdoutBuf += chunk.toString();
+        const m = stdoutBuf.match(/listening on http:\/\/localhost:(\d+)/);
+        if (m) {
+          clearTimeout(timer);
+          resolve(Number(m[1]));
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error(`Server process exited early (code ${code}).`));
+      });
+    });
+
+    const hello = await fetch(`http://localhost:${port}/hello`);
+    const helloBody = await hello.json();
+    const products = await fetch(`http://localhost:${port}/products`);
+    const productsBody = await products.json();
+    const missing = await fetch(`http://localhost:${port}/nope`);
+
+    // ADR-015 — API POST + REQUEST AS: post a real JSON body to the real
+    // spawned server, then confirm a later GET sees it (genuinely live,
+    // not just an in-process assertion).
+    const created = await fetch(`http://localhost:${port}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprocket", price: 4.25 }),
+    });
+    const createdBody = await created.json();
+    const badPost = await fetch(`http://localhost:${port}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Missing price" }),
+    });
+    const productsAfterPost = await (await fetch(`http://localhost:${port}/products`)).json();
+
+    ok =
+      hello.status === 200 &&
+      helloBody === "Hello from NOVA" &&
+      products.status === 200 &&
+      Array.isArray(productsBody) &&
+      productsBody.length === 2 &&
+      productsBody[0].name === "Widget" &&
+      productsBody[0].price === 9.99 &&
+      missing.status === 404 &&
+      created.status === 200 &&
+      createdBody.name === "Sprocket" &&
+      createdBody.price === 4.25 &&
+      badPost.status === 400 &&
+      productsAfterPost.length === 3;
+    if (!ok) {
+      failureDetail = `hello=${JSON.stringify(helloBody)} products=${JSON.stringify(productsBody)} missing.status=${missing.status} created.status=${created.status} createdBody=${JSON.stringify(createdBody)} badPost.status=${badPost.status} productsAfterPost=${JSON.stringify(productsAfterPost)}`;
+    }
+  } catch (e) {
+    failureDetail = String(e.stack ?? e);
+  } finally {
+    child.kill();
+  }
+
+  if (ok) {
+    console.log(`  OK   api_service.nova serve -> real HTTP responses verified`);
+    passed++;
+  } else {
+    console.log(`  FAIL api_service.nova serve`);
+    console.log(indent(failureDetail));
     failed++;
   }
 }

@@ -1,25 +1,15 @@
 # ADR-013: Interactive PAGE — BUTTON / WHEN CLICKED
 
-**Provenance note**: unlike ADR-011/012, real detail survived for this
-one — the original chat's own summary, read directly from the shared
-transcript: *"Built ADR-013: BUTTON/WHEN clicked — genuine, working
-client-side interactivity, compiled from restricted NOVA syntax to real
-JavaScript... I extracted the actual generated `<script>` from a real
-`nova run` output, executed it in Node against a minimal DOM stub, and
-called the generated button functions programmatically — confirming
-increment, decrement, and reset all correctly flowed through the full
-real chain."* It also named two real bugs it hit: a missing newline-skip
-between `WHEN`'s closing `END` and `BUTTON`'s own `END`, and a
-semantic-analysis bug from reusing the wrong scope for "page-local state."
-Both are deliberately avoided by construction below, not just fixed after
-the fact. The exact grammar wasn't recoverable verbatim; this repository
-designed it from that description, reusing established NOVA mechanisms
-(`SET`/`CHANGE`) wherever they already fit — the same restraint every
-prior ADR in this series has applied.
+This design reuses established NOVA mechanisms (`SET`/`CHANGE`) wherever
+they already fit, rather than growing parallel new ones — the same
+restraint every prior ADR in this series has applied. Two footguns are
+deliberately avoided by construction, not just fixed after the fact: a
+missing newline-skip between `WHEN`'s closing `END` and `BUTTON`'s own
+`END` (§ Grammar, below), and reusing the wrong scope for "page-local
+state" during semantic analysis.
 
 ## Problem
-This is the area the original chat's very first message named as the
-hardest problem in the whole spec: how does a `PAGE` safely call into
+This is one of the hardest problems in the whole spec: how does a `PAGE` safely call into
 backend logic without creating a client/server RPC bug class? v0.12
 answers the narrowest honest version of that question — no server exists
 yet (that's still a later milestone), so "interactivity" here means
@@ -67,10 +57,8 @@ into real grammar. A `WHEN CLICKED` block is parsed as an **ordinary**
 statement block (reusing the existing generic block parser) — anything
 syntactically valid NOVA can appear there. Restricting *what's actually
 allowed* is deliberately a semantic check, not a parser restriction (see
-below) — this mirrors exactly what the original's own verification
-technique implies (it "tried to sneak a builtin call... rejected with a
-semantic error," meaning the parser accepted the call syntactically and
-the *analyzer* is what drew the line).
+below): a builtin call parses fine syntactically, but the *analyzer* is
+what draws the line and rejects it with a semantic error.
 
 ### What a click handler may actually do — enforced, narrowly
 DECISION: inside `WHEN CLICKED`, every statement must be `CHANGE
@@ -92,19 +80,17 @@ because they're different concerns:
    (`assertNoUnsafeConstructs`) — `infer()` alone would happily accept a
    call to any ordinary, safe-looking procedure, which is exactly the
    RPC-shaped hole this whole ADR exists to close. Splitting these two
-   checks apart, rather than trying to make one pass do both jobs, is a
-   direct, deliberate countermeasure to the original's own semantic-
-   analysis bug (using the wrong scope produced false negatives *and*
-   false positives at once — separating "is this well-typed" from "is
-   this allowed here" removes that failure mode by construction).
+   checks apart, rather than trying to make one pass do both jobs, avoids
+   a real failure mode: using the wrong scope could produce false
+   negatives *and* false positives at once — separating "is this
+   well-typed" from "is this allowed here" removes that by construction.
 
 ### BUTTON is top-level only, for now
 DECISION: `BUTTON` is valid only at a `PAGE`'s top level, not inside a
 `FOR EACH` (`E-SEM-038`). A "delete this row" button per rendered record
 is real and useful, but it needs an answer for *which* record a click
-came from — a genuinely separate design question the original's own
-roadmap explicitly flagged as the next thing needed after this milestone,
-not a detail to fold in here.
+came from — a genuinely separate design question, left for a later
+milestone rather than folded in here.
 
 ### Compiled output
 DECISION: `nova build` emits one `<script>` block per page containing any
@@ -121,8 +107,7 @@ button functions independently testable, which is exactly how this ADR
 verifies them).
 
 ### Verification: execute the generated JavaScript, not just diff it
-DECISION, carried over directly from the original's own approach: passing
-tests must **execute** the compiled `<script>` in Node against a minimal
+DECISION: passing tests must **execute** the compiled `<script>` in Node against a minimal
 DOM stub and call the generated button functions programmatically,
 asserting on the resulting `state`/DOM text — not merely assert the HTML
 string contains expected substrings. A string match cannot catch a

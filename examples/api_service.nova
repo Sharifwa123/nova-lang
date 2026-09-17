@@ -1,0 +1,45 @@
+# v0.13 (ADR-014): SERVICE/API - a live HTTP server. Unlike PAGE (ADR-011),
+# this is inert during both `nova run` and `nova build`; it's only served
+# by `nova serve`:
+#   node src/cli.js serve examples/api_service.nova 3000
+#   curl http://localhost:3000/hello
+#   curl http://localhost:3000/products
+#   curl -X POST -d '{"name":"Sprocket","price":4.25}' http://localhost:3000/products
+#
+# Handlers are genuine, unrestricted server-side NOVA code (unlike a PAGE
+# BUTTON's WHEN CLICKED, ADR-013) - SAVE/GET/procedure calls all work, and
+# every request shares the SAME store, so this is genuinely live: a SAVE
+# in one request is visible to a GET in the next.
+#
+# v0.14 (ADR-015): API POST + REQUEST AS <DataType> - reads and validates
+# the real JSON request body against Product's declared fields.
+
+DATA Product
+    name: text
+    price: decimal
+END
+
+DO makeProduct RETURNS Product
+    INPUT n: text
+    INPUT pr: decimal
+    RETURN { name: n, price: pr }
+END
+
+SAVE makeProduct("Widget", 9.99)
+SAVE makeProduct("Gizmo", 14.5)
+
+SERVICE
+    API GET "/products"
+        RETURN GET Product
+    END
+
+    API POST "/products"
+        SET p = REQUEST AS Product
+        SAVE p
+        RETURN p
+    END
+
+    API GET "/hello"
+        RETURN "Hello from NOVA"
+    END
+END

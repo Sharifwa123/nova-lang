@@ -1,9 +1,5 @@
 # ADR-010: Error Handling (TRY / CATCH)
 
-**Provenance note**: same situation as ADR-006/007/009 — only the roadmap
-line "error handling (`TRY`/catch-style)" survived from the original chat.
-Syntax and semantics below are this repository's own design.
-
 ## Problem
 Every runtime error in NOVA so far (division by zero, index out of
 bounds, a missing field, `ASK` running out of input, a bad built-in

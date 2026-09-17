@@ -1,8 +1,8 @@
 // v0.12 (ADR-013) - interactive PAGE: page-local state (SET/CHANGE reused)
 // and BUTTON/WHEN CLICKED compiled to real client-side JavaScript.
 //
-// Verification matches the original chat's own approach directly: passing
-// tests must EXECUTE the generated <script> in a real JS context (Node's
+// Verification: passing tests must EXECUTE the generated <script> in a
+// real JS context (Node's
 // vm module standing in for a browser) and call the generated button
 // functions programmatically, asserting on the resulting state/DOM text -
 // not just assert the HTML string contains expected substrings. A string
@@ -142,11 +142,11 @@ test("v0.12: a page with no state/buttons emits no <script> at all (unchanged fr
   assertEqual(html.includes("<script>"), false);
 });
 
-// ---- the exact bug the original chat found, proactively avoided ----
+// ---- a real parser footgun, proactively avoided ----
 
 test("v0.12: consecutive BUTTON blocks parse correctly (WHEN's END and BUTTON's own END, back to back)", () => {
-  // The original's own confirmed bug: missing newline-skip between WHEN's
-  // closing END and BUTTON's own END broke every button with an action.
+  // A missing newline-skip between WHEN's closing END and BUTTON's own
+  // END would break every button with an action - guarded against here.
   compile(`PAGE "/"
     SET count = 0
     BUTTON "a"
@@ -162,7 +162,7 @@ test("v0.12: consecutive BUTTON blocks parse correctly (WHEN's END and BUTTON's 
 END`);
 });
 
-// ---- the restriction boundary, tested exactly like the original did ----
+// ---- the restriction boundary ----
 
 test("v0.12: sneaking a builtin call into a click handler is rejected (E-SEM-037), not silently allowed", () => {
   assertThrows(

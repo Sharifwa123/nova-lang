@@ -1,0 +1,10 @@
+# expect: E-SEM-042
+DATA Product
+    name: text
+END
+SERVICE
+    API GET "/x"
+        SET p = REQUEST AS Product
+        RETURN p
+    END
+END

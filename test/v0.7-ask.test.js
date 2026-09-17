@@ -1,7 +1,7 @@
 // v0.7 (ADR-008) - ASK: real synchronous input. Tests use a canned `input`
-// list (the "automated suite with canned input queues" verification path
-// the original chat itself described); test/run-examples.js separately
-// pipes real stdin into the CLI, matching the original's other path.
+// list (fast, deterministic automated coverage); test/run-examples.js
+// separately pipes real stdin into the CLI, the dual verification ADR-008
+// establishes.
 import { test, assertEqual, assertThrows } from "./harness.js";
 import { compile, runSource } from "../src/nova.js";
 import { CODES } from "../src/diagnostics/codes.js";
