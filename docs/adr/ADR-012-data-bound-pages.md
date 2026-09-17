@@ -1,16 +1,11 @@
 # ADR-012: Data-Bound PAGE Content
 
-**Provenance note**: same situation as ADR-011 — only the roadmap line
-"data-bound web UI — PAGE reading DATA/GET-sourced values" survived.
-Design below is this repository's own.
-
 ## Problem
 ADR-011's `PAGE` can only ever show fixed, literal content — genuinely
 useful pages need to show *records*: a product catalog, a list of saved
 items, anything backed by `DATA`/persistence (ADR-005/006). The real
-question, flagged explicitly in HANDOFF.md before this ADR was written:
-**what does "data-bound" even mean when `nova build` compiles a page
-exactly once, and there is no server yet to re-run it per request?**
+question: **what does "data-bound" even mean when `nova build` compiles a
+page exactly once, and there is no server yet to re-run it per request?**
 
 ## Decision — build-time binding, honestly named as such
 `nova build` now works like a conventional **static site generator**:

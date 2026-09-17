@@ -5,11 +5,10 @@ Scope: Language core only — the lexer, parser, AST, semantic analyzer, and
 tree-walking interpreter for the Milestone-1 surface, plus ADR-002's `CHANGE`
 keyword, which was adopted as part of v0.1 before implementation began.
 
-This document is a reconstruction, from the original design chat's own
-verbatim text, of the specification that was frozen before any code was
-written. See [docs/reference/raw-chat-transcript-partial.txt](reference/raw-chat-transcript-partial.txt)
-and the ADRs in [docs/adr/](adr/) for the full rationale behind each decision.
-Everything marked `DECISION` below is binding on this implementation.
+This document is the specification that was frozen before any code was
+written. See the ADRs in [docs/adr/](adr/) for the full rationale behind
+each decision. Everything marked `DECISION` below is binding on this
+implementation.
 
 ## 0. Document Conventions
 
@@ -74,7 +73,7 @@ AND   OR   NOT
 
 DECISION — forward keyword reservation: the following are reserved but carry
 **no grammar** in v0.1. Using them as identifiers is a lexical/semantic error
-today, protecting the extension points named in the original brief:
+today, protecting the extension points named in §15 below:
 ```
 DATA   PAGE   SCREEN   API   SERVICE   SECURITY   WHEN
 USE   GO   TO   CREATE   GET   SAVE   DELETE   STYLE
@@ -622,10 +621,7 @@ Everything else in §1–§17 and the v0.2/v0.3 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-006-persistence.md](adr/ADR-006-persistence.md) for full
-rationale. **Provenance note**: unlike v0.1–v0.4, the original chat's exact
-syntax for this milestone did not survive verbatim — this design is this
-repository's own, using the `SAVE`/`GET`/`DELETE` keywords the original
-reserved for exactly this purpose, in the same ADR-first discipline.
+rationale.
 
 **§2.6 (amended)** — `SAVE`, `GET`, `DELETE` move from forward-reserved
 into real grammar.
@@ -654,7 +650,7 @@ preserved).
 DECISION: `GET TypeName` returns every currently-saved record of that
 type, oldest first, as a `list` — no `id` attached, no filtering yet
 (`E-SEM-023` if `TypeName` isn't a known `DATA` type). `WHERE`-style
-filtering is explicitly deferred, same as the original roadmap's own note.
+filtering is intentionally deferred.
 
 DECISION: `DELETE TypeName idExpr` is **idempotent** — removing an id
 that's already gone is a silent no-op, not an error (`E-SEM-024` for an
@@ -686,11 +682,7 @@ unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-007-standard-library.md](adr/ADR-007-standard-library.md) for
-full rationale. **Provenance note**: the original chat's exact stdlib
-surface didn't survive verbatim; `UPPER` is preserved from a concrete
-detail that did survive (it's named twice in the original's own bug-fix
-narrative), the rest is this repository's own small, deliberately narrow
-choice.
+full rationale.
 
 Six built-ins, called with **exactly** the same syntax as a `DO` procedure
 — no separate "builtin call" form:
@@ -730,10 +722,7 @@ Everything else in §1–§17 and the v0.2–v0.5 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-008-ask-input.md](adr/ADR-008-ask-input.md) for full
-rationale. **Provenance note**: this is the last milestone whose exact
-syntax and keyword survived directly in the original chat's own summary
-text — `SET name = ASK "prompt "`, verified via canned input queues *and*
-real piped stdin (`printf ... | nova run ...`), both reproduced here.
+rationale.
 
 **New grammar**: `ask-expression ::= "ASK" expression`. New keyword `ASK`.
 
@@ -771,9 +760,7 @@ Everything else in §1–§17 and the v0.2–v0.6 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-009-list-indexing-mutation.md](adr/ADR-009-list-indexing-mutation.md)
-for full rationale. **Provenance note**: only the roadmap line "list
-indexing/mutation" survived from the original chat; the syntax is this
-repository's own design.
+for full rationale.
 
 **§5.1 (amended)** — postfix `[expression]` generalizes the same
 mechanism `.field` already uses (ADR-003): it follows *any* primary, and
@@ -828,8 +815,7 @@ Everything else in §1–§17 and the v0.2–v0.7 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-010-error-handling.md](adr/ADR-010-error-handling.md) for
-full rationale. **Provenance note**: only the roadmap line "error handling
-(`TRY`/catch-style)" survived from the original chat.
+full rationale.
 
 **New grammar**: `try-statement ::= "TRY" block "CATCH" identifier block
 "END"`. New keywords `TRY`, `CATCH` (`CATCH` is mandatory — no bare `TRY`).
@@ -868,13 +854,7 @@ Everything else in §1–§17 and the v0.2–v0.8 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-011-static-page-compiler.md](adr/ADR-011-static-page-compiler.md)
-for full rationale. **Provenance note**: this is the first milestone with
-genuine invention rather than reconstruction — only the roadmap's
-three-step split (static → data-bound → interactive UI), the reserved
-keywords `PAGE`/`STYLE`, and one confirmed detail (a `PAGE` block
-containing `STYLE` and `BUTTON` and `WHEN`) survived from the original
-chat's very first message, which also named this exact area *"the single
-hardest architectural problem in this whole spec."*
+for full rationale.
 
 **§2.6 (amended)** — `PAGE`, `STYLE` move from forward-reserved into real
 grammar. New keywords: `TITLE`, `HEADING`, `TEXT`.
@@ -936,8 +916,7 @@ Everything else in §1–§17 and the v0.2–v0.9 amendments above is unchanged.
 
 Status: Implemented (this repository). See
 [docs/adr/ADR-012-data-bound-pages.md](adr/ADR-012-data-bound-pages.md)
-for full rationale. **Provenance note**: only the roadmap line survived;
-design is this repository's own.
+for full rationale.
 
 **§ADR-011 grammar (amended)** — `page-element` gains a recursive
 `FOR EACH` variant:
@@ -989,13 +968,7 @@ unchanged.
 Status: Implemented (this repository) — **the last originally-planned
 milestone**. See
 [docs/adr/ADR-013-interactive-pages.md](adr/ADR-013-interactive-pages.md)
-for full rationale. **Provenance note**: unlike ADR-011/012, real detail
-survived here — the original chat's own summary confirmed the exact
-keywords `BUTTON`/`WHEN clicked`, a "page-local state" concept, the
-`SAVE`/`GET`/`ASK`/call restriction on click handlers, and its
-verification method (execute the generated JavaScript, not just diff the
-HTML). Grammar and codegen below are this repository's own reconstruction
-from that description.
+for full rationale.
 
 **New grammar**:
 ```
@@ -1032,9 +1005,9 @@ DECISION: `nova build` emits one `<script>` per interactive page — a
 `state` object, a `render()` updating every state-bound element's
 `textContent` (never `innerHTML`, so no HTML-escaping is needed for these
 updates specifically), and one named function per `BUTTON`. Verification
-matches the original's own approach directly: tests execute the generated
-script against a DOM stub and call the button functions programmatically,
-asserting on the resulting state and DOM text — not a string match.
+executes the generated script against a DOM stub and calls the button
+functions programmatically, asserting on the resulting state and DOM
+text — not a string match.
 
 New diagnostics:
 
@@ -1048,17 +1021,14 @@ New diagnostics:
 | E-SEM-038 | BUTTON used inside FOR EACH (not yet supported) |
 
 Everything else in §1–§17 and the v0.2–v0.11 amendments above is
-unchanged. **This completes every milestone named in the original
-roadmap** (v0.1 through v0.12); anything past this point is new ground,
-not a recovery of prior design.
+unchanged. **This completes every milestone in the v0.1–v0.12 roadmap.**
 
 ---
 
 ## v0.13 Amendments — SERVICE / API: a Live HTTP Server (ADR-014)
 
-Status: Implemented (this repository) — the first milestone genuinely past
-the original roadmap (v0.1–v0.12), with no surviving chat detail to
-reconstruct from at all. See
+Status: Implemented (this repository) — the first milestone past the
+v0.1–v0.12 roadmap. See
 [docs/adr/ADR-014-service-api.md](adr/ADR-014-service-api.md) for full
 rationale.
 

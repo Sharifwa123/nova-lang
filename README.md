@@ -6,7 +6,7 @@ compiler pipeline — one language meant to eventually span core logic, data,
 UI, and APIs, instead of stitching together a different language per layer.
 
 This repository implements **v0.1 through v0.14**: v0.1–v0.12 is every
-milestone in the original design roadmap — lexer → parser → AST →
+milestone in the language's core design roadmap — lexer → parser → AST →
 semantic analyzer → tree-walking interpreter, covering the core language
 (SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
 procedures, `DATA` named types, in-memory persistence (`SAVE`/`GET`/
@@ -18,9 +18,9 @@ v0.14 are the first milestones past that original roadmap: `SERVICE`/`API`
 compile to a real, live HTTP server (`nova serve`) sharing one persistence
 store across every request, with `GET` (v0.13) and `POST` +
 `REQUEST AS <DataType>` (v0.14) reading and validating a real JSON request
-body. See [HANDOFF.md](HANDOFF.md) for how this repo came to exist and
-what's next, and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the
-binding language specification.
+body. See [HANDOFF.md](HANDOFF.md) for project history and what's next,
+and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding
+language specification.
 
 ## Try it
 
@@ -86,7 +86,6 @@ src/
 docs/
   SPECIFICATION.md   the binding v0.1 language spec
   adr/               architectural decision records
-  reference/         the original design chat, kept for provenance
 examples/        runnable .nova programs (and examples/errors/ for diagnostics)
 test/            zero-dependency unit tests + a real-CLI example runner
 ```

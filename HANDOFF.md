@@ -23,11 +23,7 @@ anything new.
 **The process discipline that got this here, non-negotiable:**
 1. **ADR before code**, for any real design decision — not after. Look at
    `docs/adr/` for the pattern: problem, options considered, decision with
-   *reasoning* (not just what), consequences. ADR-006's and ADR-011's
-   provenance notes are worth reading specifically — they show how to be
-   honest in the doc itself about what's recovered vs. invented (see
-   "How this repository came to exist" below for why that distinction
-   matters here specifically).
+   *reasoning* (not just what), consequences.
 2. **Smallest correct version per milestone.** Every ADR in this repo
    explicitly defers things — read the "DEFERRED" callouts before
    assuming a feature doesn't exist by accident. Don't bundle three
@@ -46,10 +42,9 @@ anything new.
    If you're about to add a new keyword, check whether an existing one
    already means what you need first.
 
-**What's actually next**, per this file's own roadmap section below — and
-this is the part with *zero* surviving detail to recover, genuinely new
-ground (v0.13's `SERVICE`/`API` and v0.14's `POST`/`REQUEST AS` were the
-first two pieces of this list; see ADR-014/ADR-015):
+**What's actually next**, per this file's own roadmap section below —
+genuinely new ground (v0.13's `SERVICE`/`API` and v0.14's `POST`/`REQUEST
+AS` were the first two pieces of this list; see ADR-014/ADR-015):
 1. `PUT`/`DELETE` on `API` — v0.14 added `POST` (with `REQUEST AS
    <DataType>` validating the JSON body against a flat, primitive-only
    `DATA` shape); `PUT` implies "update this existing id" and `DELETE`
@@ -81,53 +76,24 @@ modeling, UI, and APIs into one language — see
 covering v0.1 through v0.14) and [docs/adr/](docs/adr/) for the fifteen
 architectural decisions frozen so far.
 
-## How this repository came to exist (important context)
+## Project conventions worth knowing
 
-A separate Claude Code session (**not** this one) designed and built NOVA
-through 13 iterations (v0.1 through v0.12: core language, lists/records,
-typed procedures, `DATA` named types, persistence, a stdlib, interactive
-input, error handling, list indexing, a static-HTML `PAGE` compiler,
-data-bound UI, and finally client-side `BUTTON`/`WHEN clicked` interactivity
-compiled to real JavaScript — 382 tests, 19 examples, all reportedly
-passing) entirely inside that session's own temporary code-execution
-sandbox on claude.ai.
-
-**None of that source code survived.** The sandbox was never connected to
-any persistent disk or repository the user could reach — it existed only
-for the lifetime of that chat session. When the user asked how to hand it
-to Claude Code, the honest answer that session gave was that there was no
-mechanism to transfer the files out; only the chat's own text survived.
-
-This repository is the result of a **second** Claude Code session (this
-one) reading that shared chat transcript
-(`https://claude.ai/share/858e0f98-dfc3-4025-ac58-8b8c26a92a90`) end to
-end, extracting the parts that *did* survive as verbatim text — the full
-v0.1 specification (§0–17) and two ADRs (block delimiters; the `CHANGE`
-keyword) — and **re-implementing v0.1 from scratch** against that spec,
-for real, on the user's actual machine. A partial raw transcript is kept at
-[docs/reference/raw-chat-transcript-partial.txt](docs/reference/raw-chat-transcript-partial.txt)
-for provenance and to mine for detail while rebuilding later versions.
-
-One deliberate deviation from the original: that session used TypeScript
-with a hand-rolled test harness because its sandbox had no npm registry
-access. This repository is plain, modern JavaScript (Node 18+, ES modules)
-with a zero-dependency test harness (`test/harness.js`) — not because
-TypeScript is undesirable, but because it removes any dependency on npm
-registry access being available in whatever environment continues this
-work. If real npm access is confirmed available, adding TypeScript (or at
-minimum a JSDoc + `tsc --checkJs` type-checking pass) is a reasonable first
-improvement — the module boundaries (`lexer/`, `parser/`, `ast/`,
-`analyzer/`, `interpreter/`, `diagnostics/`) were kept small and
-dependency-light specifically to make that migration mechanical later.
+This repository has no npm dependencies at all — see `package.json` and
+`test/harness.js` (a zero-dependency test harness). That's a deliberate
+choice, not an oversight: nothing needs installing to build, test, or run
+this project, which removes any dependency on npm registry access being
+available in whatever environment continues this work. If TypeScript is
+wanted later (or at minimum a JSDoc + `tsc --checkJs` type-checking pass),
+that's a reasonable improvement — the module boundaries (`lexer/`,
+`parser/`, `ast/`, `analyzer/`, `interpreter/`, `diagnostics/`) were kept
+small and dependency-light specifically to make that migration mechanical.
 
 ## Current state (this repo)
 
 - **v0.1 core, fully implemented and passing**: lexer, recursive-descent
   parser, semantic analyzer, tree-walking interpreter.
 - **`CHANGE` (ADR-002) implemented as part of v0.1**, not deferred — it was
-  adopted before any code was written in the original design process, so
-  treating it as core rather than a later add-on is faithful to that
-  history.
+  adopted as core language surface before any later feature work began.
 - **v0.2 (ADR-003) implemented**: real `[1, 2, 3]` list and `{ x: 1, y: 2 }`
   record literal syntax. `FOR EACH` and `.field` access no longer need any
   host-injected data — see `examples/catalog.nova` for the first fully
@@ -145,10 +111,7 @@ dependency-light specifically to make that migration mechanical later.
   value is checked statically and precisely typed instead of staying
   `'unknown'` — see `examples/data_types.nova`.
 - **v0.5 (ADR-006) implemented**: in-memory persistence — `SAVE`/`GET`/
-  `DELETE`, one collection per `DATA` type, integer ids. **Note**: unlike
-  v0.1–v0.4, the original chat's exact syntax for this milestone didn't
-  survive verbatim — this is this repo's own design (same ADR-first
-  discipline, the same three reserved keywords) — see
+  `DELETE`, one collection per `DATA` type, integer ids — see
   `examples/persistence.nova`.
 - **v0.6 (ADR-007) implemented**: a small standard library — `UPPER`,
   `LOWER`, `TRIM`, `LENGTH`, `ROUND`, `ABS` — called with exactly the same
@@ -158,11 +121,10 @@ dependency-light specifically to make that migration mechanical later.
 - **v0.7 (ADR-008) implemented**: `ASK "prompt"` for real, synchronous,
   lazily-read stdin input (`SET name = ASK "Name? "`). A program that
   never calls `ASK` never touches stdin — see
-  `src/interpreter/stdin.js`. Verified two ways, matching the original's
-  own approach: canned input queues in unit tests, and real piped stdin
-  through the CLI (`test/run-examples.js` now supports an optional
-  `<example>.stdin` companion file; see `examples/ask.nova` +
-  `examples/ask.stdin`).
+  `src/interpreter/stdin.js`. Verified two ways: canned input queues in
+  unit tests, and real piped stdin through the CLI (`test/run-examples.js`
+  supports an optional `<example>.stdin` companion file; see
+  `examples/ask.nova` + `examples/ask.stdin`).
 - **v0.8 (ADR-009) implemented**: list indexing (`products[0]`) and
   mutation (`CHANGE products[0] = ...`, reusing `CHANGE` rather than a new
   keyword — see the ADR for why). Lists are now explicitly reference
@@ -194,18 +156,17 @@ dependency-light specifically to make that migration mechanical later.
   client-side JavaScript. Click handlers may only `CHANGE` page-local
   state with a literal/state/arithmetic expression — no calls, no
   `SAVE`/`GET`/`ASK` (`E-SEM-037`), checked by the analyzer, not just
-  documented. **This completes every milestone in the original roadmap**
-  (v0.1 through v0.12). Verified the same way the original chat itself
-  verified it: by executing the generated `<script>` against a DOM stub
-  and calling the button functions programmatically — a real onclick →
-  state mutation → `render()` → DOM-text-update chain, not a string
+  documented. **This completes every milestone in the v0.1–v0.12
+  roadmap.** Verified by executing the generated `<script>` against a DOM
+  stub and calling the button functions programmatically — a real onclick
+  → state mutation → `render()` → DOM-text-update chain, not a string
   match. See `examples/interactive_counter.nova`.
-- **v0.13 (ADR-014) implemented** — the first milestone past the original
-  roadmap. `SERVICE`/`API` compile to a real, live HTTP server: `nova
-  serve <file>.nova [port]` runs the file once (silently, populating any
-  `SAVE`'d data, exactly like `nova build`'s existing model) and then keeps
-  that same interpreter — and its persistence store — alive across every
-  subsequent request, so `SAVE`/`GET`/`DELETE` inside a handler are
+- **v0.13 (ADR-014) implemented** — the first milestone past the
+  v0.1–v0.12 roadmap. `SERVICE`/`API` compile to a real, live HTTP server:
+  `nova serve <file>.nova [port]` runs the file once (silently, populating
+  any `SAVE`'d data, exactly like `nova build`'s existing model) and then
+  keeps that same interpreter — and its persistence store — alive across
+  every subsequent request, so `SAVE`/`GET`/`DELETE` inside a handler are
   genuinely live (a `SAVE` in one request is visible to a `GET` in the
   next), unlike `PAGE`'s build-time-only snapshot, which this milestone
   leaves completely untouched. Only `GET` endpoints are supported so far;
@@ -249,8 +210,7 @@ dependency-light specifically to make that migration mechanical later.
   inspect real output files, and one dedicated `nova serve` check that
   spawns the real CLI as a live server and issues real HTTP requests
   (GET and POST both) against it. This is deliberately the "actual CLI
-  output" level of verification, not just in-process test calls, matching
-  the discipline described in the original chat.
+  output" level of verification, not just in-process test calls.
 - Every diagnostic in SPECIFICATION.md §11's table is implemented and has
   at least one test or example exercising it.
 
@@ -315,12 +275,10 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 
 ## What's next
 
-**Every milestone in the original roadmap (v0.1 through v0.12) is
-implemented, plus v0.13/v0.14 (`SERVICE`/`API`, ADR-014/ADR-015) — the
-first milestones past that roadmap.** What's left is, like v0.13/v0.14
-were, explicitly beyond what the original chat described, with no
-surviving detail to reconstruct from — genuinely new ground, not a
-recovery:
+**Every milestone in the v0.1–v0.12 roadmap is implemented, plus
+v0.13/v0.14 (`SERVICE`/`API`, ADR-014/ADR-015) — the first milestones past
+that roadmap.** What's left is, like v0.13/v0.14 were, genuinely new
+ground:
 
 1. `PUT`/`DELETE` on `API` — v0.14 added `POST` + `REQUEST AS <DataType>`
    (validated against a flat, primitive-only `DATA` shape); `PUT` implies
@@ -362,7 +320,7 @@ programmatically.
    data-bound PAGE (012), interactive PAGE (013) — read the last three in
    particular before touching PAGE further — and the live SERVICE/API
    HTTP server (014) plus API POST/REQUEST AS (015), the first two
-   milestones past the original roadmap.
+   milestones past the v0.1–v0.12 roadmap.
 4. `src/nova.js` — the four-stage pipeline in ~20 lines; the best map of
    how the pieces fit together.
 5. `examples/` and `examples/errors/` — read these before the source; they

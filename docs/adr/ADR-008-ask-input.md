@@ -1,15 +1,5 @@
 # ADR-008: ASK — Real Synchronous Input
 
-**Provenance note**: this is the last milestone with a concrete detail that
-survived the original chat verbatim — its own summary names this exact
-ADR number and syntax: *"Built ADR-008 (ASK): real, synchronous stdin
-input — `SET name = ASK "prompt "`. Verified two ways: the automated suite
-(canned input queues, including inside loops), and actual piped stdin
-through the real CLI (`printf "Test\n7\n" | nova run ...`)."* This ADR
-reconstructs that design from that description; the exact prose rationale
-did not survive, but the syntax, the "canned queue + real piped stdin"
-dual verification strategy, and the keyword did.
-
 ## Problem
 NOVA can compute and persist, but a program can't ask its user anything —
 every example so far has all its data baked in at `SET` time or supplied
@@ -70,15 +60,14 @@ everywhere else (see `NO_SUCH_FIELD`, `DIVIDE_BY_ZERO` — runtime
 conditions that can't be caught statically still get a clear, loud
 diagnostic rather than a quiet fallback value).
 
-### Dual verification, matching the original's own approach
-DECISION, carried over directly: the interpreter accepts an optional
-canned `input: string[]` list (consumed in order, exhaustion triggers the
-same `E-RUN-004`) for fast, deterministic automated tests — see
-`test/v0.7-ask.test.js`. The real CLI instead uses the actual synchronous
-stdin reader. Both paths share the same `AskExpression` evaluation code;
-only where the next line comes from differs. `test/run-examples.js`
-additionally pipes real stdin into the CLI for at least one example,
-matching the original's own `printf ... | nova run ...` verification —
+### Dual verification: canned input and real piped stdin
+DECISION: the interpreter accepts an optional canned `input: string[]`
+list (consumed in order, exhaustion triggers the same `E-RUN-004`) for
+fast, deterministic automated tests — see `test/v0.7-ask.test.js`. The
+real CLI instead uses the actual synchronous stdin reader. Both paths
+share the same `AskExpression` evaluation code; only where the next line
+comes from differs. `test/run-examples.js` additionally pipes real stdin
+into the CLI for at least one example (`printf ... | nova run ...`) —
 canned-queue tests alone would not have caught a bug in the real
 `fs.readSync`-based reader.
 

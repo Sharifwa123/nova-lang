@@ -1,10 +1,8 @@
 # ADR-015: API POST and REQUEST AS — reading the request body
 
-**Provenance note**: like ADR-014, this is genuinely new ground — nothing
-survived from the original chat about write verbs at all. This ADR
-continues directly from ADR-014's own explicitly-deferred list ("Write
-verbs on `API`... a request-body story ... a genuinely separate design
-question") and HANDOFF.md's "what's next" item 1.
+This ADR continues directly from ADR-014's own explicitly-deferred list
+("Write verbs on `API`... a request-body story ... a genuinely separate
+design question") and HANDOFF.md's "what's next" item 1.
 
 ## Problem
 

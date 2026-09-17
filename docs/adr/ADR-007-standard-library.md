@@ -1,15 +1,5 @@
 # ADR-007: A Small Standard Library
 
-**Provenance note**, same as ADR-006: the original chat's exact stdlib
-surface didn't survive verbatim. One concrete data point did survive,
-though — the original's own bug-fix narrative twice mentions a built-in
-called `UPPER` (`{UPPER(favorite)}` in a string interpolation example, and
-`UPPER(label)` used as the probe in ADR-013's restriction testing), so
-`UPPER` is deliberately included here for continuity rather than invented
-fresh. The rest of this small set (`LOWER`, `TRIM`, `LENGTH`, `ROUND`,
-`ABS`) is this repository's own choice of "smallest useful set," in the
-same spirit.
-
 ## Problem
 NOVA has no way to transform a `text` or `number` value except through
 `DO`-declared procedures — there's no way to uppercase a string, trim

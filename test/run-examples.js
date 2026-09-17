@@ -28,7 +28,7 @@ for (const f of validFiles) {
   const full = path.join(examplesDir, f);
   // ADR-008 — a companion `<name>.stdin` file, if present, is piped in as
   // real stdin (not the in-process canned-input path test/v0.7-ask.test.js
-  // exercises) — matching the original chat's own dual verification.
+  // exercises) — dual verification, matching ADR-008's own discipline.
   const stdinPath = full.replace(/\.nova$/, ".stdin");
   let stdinInput;
   try {
@@ -137,9 +137,8 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
 
 // ADR-013 — interactive PAGE: real CLI build, then EXECUTE the generated
 // <script> against a DOM stub and call the button functions
-// programmatically, exactly the original chat's own verification
-// approach - a string match on the HTML cannot catch a codegen bug
-// (wrong operator, render() never called); actually running it can.
+// programmatically - a string match on the HTML cannot catch a codegen
+// bug (wrong operator, render() never called); actually running it can.
 {
   const source = path.join(examplesDir, "interactive_counter.nova");
   const distDir = path.join(examplesDir, "dist");

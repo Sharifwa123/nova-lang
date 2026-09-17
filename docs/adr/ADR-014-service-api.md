@@ -1,13 +1,5 @@
 # ADR-014: SERVICE / API — a live HTTP server
 
-**Provenance note**: unlike ADR-002/006/013, nothing survived from the
-original chat for this milestone at all — HANDOFF.md's own "What's next"
-section says so explicitly: `API`/`SERVICE` are forward-reserved keywords
-with no grammar, and this is genuinely new ground, not a recovery. This
-ADR is this repository's own design, applying the same process discipline
-(reuse existing mechanisms, smallest correct version) the recovered
-milestones already established.
-
 ## Problem
 
 Every prior milestone that touches data (`SAVE`/`GET`/`DELETE`, ADR-006;

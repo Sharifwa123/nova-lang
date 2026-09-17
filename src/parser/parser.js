@@ -506,7 +506,7 @@ export class Parser {
     const whenBlock = this.parseBlockUntil(["END"]);
     if (whenBlock.stoppedAt === "EOF") this.unclosedBlockError(buttonTok, "BUTTON's WHEN CLICKED block");
     this.expectKeyword("END"); // closes WHEN CLICKED
-    this.skipNewlines(); // the fix for the original's own missing-newline-skip bug (ADR-013)
+    this.skipNewlines(); // a missing newline-skip here would break consecutive BUTTON blocks (ADR-013)
     const end = this.expectKeyword("END"); // closes BUTTON
     return { kind: "BUTTON", label, actions: whenBlock.statements, span: spanOf(buttonTok.span, end.span) };
   }
