@@ -93,6 +93,18 @@ highlighting + Run/Build/Serve commands) — pure tooling, not a language
 change, so it doesn't get an ADR or a version bump. See its own README
 for install instructions.
 
+`package.json` is set up to publish this whole package to npm as
+`nova-lang` (`"bin"` for the `nova` CLI, `"main"`/`"exports"` for using it
+as a library via `import { runSource } from "nova-lang"`, a `"files"`
+allowlist plus `.npmignore` to keep `examples/dist/` build artifacts out).
+Verified end-to-end before ever publishing: packed with `npm pack`,
+installed globally from that tarball, and both the CLI (`run`/`build`/
+`serve`, including real HTTP requests against the resulting server) and
+the library import worked from a completely separate directory. Actually
+publishing (`npm publish`, once logged in) is a one-time step for whoever
+holds the `nova-lang` npm name — not run as part of this repo's own
+tests/CI.
+
 ## Current state (this repo)
 
 - **v0.1 core, fully implemented and passing**: lexer, recursive-descent

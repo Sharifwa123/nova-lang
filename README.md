@@ -22,6 +22,27 @@ body. See [HANDOFF.md](HANDOFF.md) for project history and what's next,
 and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding
 language specification.
 
+## Install
+
+```bash
+npm install -g nova-lang
+nova run yourfile.nova
+```
+
+`nova-lang` can also be used as a library in a Node project
+(`npm install nova-lang`):
+
+```js
+import { runSource } from "nova-lang";
+runSource('SHOW "Hello, {name}"', "<source>", {}, { write: console.log });
+```
+
+No transitive dependencies either way — see [Development](#development)
+below for why that's deliberate. Prefer working from a clone instead? See
+[Try it](#try-it) and [Development](#development) — everything below
+also works with `node src/cli.js ...` in place of `nova ...`, no install
+required.
+
 ## Try it
 
 ```bash
