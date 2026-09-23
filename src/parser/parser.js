@@ -196,6 +196,7 @@ export class Parser {
         case "DELETE": return this.parseDelete();
         case "TRY": return this.parseTry();
         case "PAGE": return this.parsePage();
+        case "SERVICE": return this.parseService();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -505,7 +506,7 @@ export class Parser {
     const whenBlock = this.parseBlockUntil(["END"]);
     if (whenBlock.stoppedAt === "EOF") this.unclosedBlockError(buttonTok, "BUTTON's WHEN CLICKED block");
     this.expectKeyword("END"); // closes WHEN CLICKED
-    this.skipNewlines(); // the fix for the original's own missing-newline-skip bug (ADR-013)
+    this.skipNewlines(); // a missing newline-skip here would break consecutive BUTTON blocks (ADR-013)
     const end = this.expectKeyword("END"); // closes BUTTON
     return { kind: "BUTTON", label, actions: whenBlock.statements, span: spanOf(buttonTok.span, end.span) };
   }
@@ -533,6 +534,83 @@ export class Parser {
       dataTypeNameSpan: typeTok.span,
       body,
       span: spanOf(forTok.span, end.span),
+    };
+  }
+
+  // ADR-014 — service-declaration ::= "SERVICE" NEWLINE api-declaration* "END"
+  parseService() {
+    const serviceTok = this.expectKeyword("SERVICE");
+    const apis = [];
+    this.skipNewlines();
+    while (!this.checkKeyword("END")) {
+      if (this.atEOF()) this.unclosedBlockError(serviceTok, "SERVICE block");
+      if (!this.checkKeyword("API")) {
+        this.error(
+          CODES.UNEXPECTED_TOKEN,
+          `Expected API, but found ${this.describeToken(this.current())}.`,
+          this.current(),
+          null,
+          "A SERVICE block may only contain API declarations."
+        );
+      }
+      apis.push(this.parseApiDeclaration());
+      this.skipNewlines();
+    }
+    const end = this.expectKeyword("END");
+    return AST.ServiceDeclaration(apis, spanOf(serviceTok.span, end.span));
+  }
+
+  // ADR-014/ADR-015 — api-declaration ::= "API" ("GET"|"POST") string-literal
+  //                                        NEWLINE statement* "END"
+  // Only GET and POST are supported so far - the grammar itself only
+  // accepts those literal keywords (see the ADRs for why this is a parser
+  // restriction, not a semantic one). The body is an ORDINARY statement
+  // block - unlike WHEN CLICKED (ADR-013), an API handler is deliberately
+  // NOT sandboxed.
+  parseApiDeclaration() {
+    const apiTok = this.expectKeyword("API");
+    let methodTok;
+    if (this.checkKeyword("GET") || this.checkKeyword("POST")) {
+      methodTok = this.advance();
+    } else {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected GET or POST, but found ${this.describeToken(this.current())}.`,
+        this.current(),
+        null,
+        'API must be followed by GET or POST, e.g. API GET "/products" or API POST "/products".'
+      );
+    }
+    const routeTok = this.current();
+    if (routeTok.type !== TokenType.STRING) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected a route (a string literal), but found ${this.describeToken(routeTok)}.`,
+        routeTok,
+        null,
+        'API GET must be followed by a route string, e.g. API GET "/products".'
+      );
+    }
+    if (routeTok.value.some((p) => p.kind === "interp")) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        "An API route cannot contain interpolation.",
+        routeTok,
+        null,
+        'Use a plain string, e.g. API GET "/products".'
+      );
+    }
+    const route = routeTok.value.map((p) => p.value).join("");
+    this.advance();
+    const block = this.parseBlockUntil(["END"]);
+    if (block.stoppedAt === "EOF") this.unclosedBlockError(apiTok, "API block");
+    const end = this.expectKeyword("END");
+    return {
+      method: methodTok.value,
+      route,
+      routeSpan: routeTok.span,
+      body: block.statements,
+      span: spanOf(apiTok.span, end.span),
     };
   }
 
@@ -736,6 +814,13 @@ export class Parser {
       this.advance();
       const prompt = this.parseExpression();
       return AST.AskExpression(prompt, spanOf(tok.span, prompt.span));
+    }
+    // ADR-015 — request-expression ::= "REQUEST" "AS" identifier
+    if (tok.type === TokenType.KEYWORD && tok.value === "REQUEST") {
+      this.advance();
+      this.expectKeyword("AS", 'REQUEST must be followed by AS <DataType>, e.g. REQUEST AS Product.');
+      const typeTok = this.expectIdentifier("a DATA type name");
+      return AST.RequestExpression(typeTok.value, typeTok.span, spanOf(tok.span, typeTok.span));
     }
     if (tok.type === TokenType.IDENTIFIER) {
       this.advance();

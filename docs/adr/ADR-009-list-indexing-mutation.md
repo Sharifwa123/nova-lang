@@ -1,12 +1,5 @@
 # ADR-009: List Indexing and Mutation
 
-**Provenance note**: same situation as ADR-006/007 — only the roadmap line
-"list indexing/mutation" survived from the original chat, bundled with
-error handling. This repository splits them into separate ADRs/milestones
-(one real capability at a time, the same discipline ADR-006/007 already
-used to split "persistence and stdlib" apart), and designs the syntax
-fresh.
-
 ## Problem
 Lists have existed since v0.2 (literals, `FOR EACH`, `LENGTH`) but there is
 still no way to read or change a single element by position — the only way

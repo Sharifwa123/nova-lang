@@ -1,0 +1,7 @@
+# expect: E-SEM-041
+SERVICE
+    API GET "/ask"
+        SET name = ASK "Name? "
+        RETURN name
+    END
+END

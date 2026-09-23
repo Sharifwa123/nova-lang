@@ -1,0 +1,6 @@
+# expect: E-SEM-040
+SERVICE
+    API GET "products"
+        RETURN 1
+    END
+END

@@ -74,6 +74,8 @@ export class Interpreter {
     }
     this.procedures = new Map(); // name -> { params: [string], body: Block } | { params, native: fn }
     this.store = new Map(); // ADR-006 — DATA type name -> { nextId, records: Map<id, value> }
+    this.dataTypeFields = new Map(); // ADR-015 — DATA type name -> [{name, type}] (registerDataTypes, run per run())
+    this.currentRequestBody = null; // ADR-015 — set for the duration of one invokeApiHandler call
     this.write = write;
     this.writePrompt = writePrompt;
     // ADR-008 — lazy, on-demand: this only ever runs when ASK actually
@@ -103,6 +105,7 @@ export class Interpreter {
 
   run() {
     this.registerProcedures(this.program.statements);
+    this.registerDataTypes(this.program.statements);
     this.execStatements(this.program.statements, this.globalEnv);
   }
 
@@ -116,6 +119,17 @@ export class Interpreter {
           params: stmt.parameters.map((p) => p.name.name),
           body: stmt.body,
         });
+      }
+    }
+  }
+
+  // ADR-015 — DataDeclaration.fields already carries exactly {name, type}
+  // (parseData's own output), so this is a direct read of the AST, not a
+  // re-derivation of anything the analyzer computed for itself.
+  registerDataTypes(statements) {
+    for (const stmt of statements) {
+      if (stmt.kind === "DataDeclaration") {
+        this.dataTypeFields.set(stmt.name.name, stmt.fields);
       }
     }
   }
@@ -212,6 +226,8 @@ export class Interpreter {
         return; // ADR-005 — no runtime representation; a pure naming layer over `record`
       case "PageDeclaration":
         return; // ADR-011 — inert during `nova run`; compiled by `nova build` instead
+      case "ServiceDeclaration":
+        return; // ADR-014 — inert during `nova run`/`nova build`; served by `nova serve` instead
       case "ReturnStatement": {
         const v = stmt.value ? this.evaluate(stmt.value, env) : NONE;
         throw new ReturnSignal(v);
@@ -278,6 +294,44 @@ export class Interpreter {
     return indexValue.value;
   }
 
+  // Runs `statements` in `env`, returning the value of whichever RETURN
+  // (if any) stops it - NONE if it falls off the end without one. Shared
+  // by callProcedure and invokeApiHandler (ADR-014) so both reuse the
+  // exact same "a statement list run for its RETURN value" control flow.
+  runBlockForValue(statements, env) {
+    try {
+      this.execStatements(statements, env);
+    } catch (e) {
+      if (e instanceof ReturnSignal) return e.value;
+      throw e;
+    }
+    return NONE;
+  }
+
+  // ADR-015 — does a raw JSON value (from a POST body) match a DATA field's
+  // declared scalar type? (Analyzer already guaranteed `fieldType` is one
+  // of these four - REQUEST_TYPE_UNSUPPORTED_FIELD rejects anything else
+  // before a request can ever arrive.)
+  jsonMatchesFieldType(raw, fieldType) {
+    switch (fieldType) {
+      case "integer": return typeof raw === "number" && Number.isInteger(raw);
+      case "decimal": return typeof raw === "number";
+      case "text": return typeof raw === "string";
+      case "boolean": return typeof raw === "boolean";
+      default: return false;
+    }
+  }
+
+  jsonToValue(raw, fieldType) {
+    switch (fieldType) {
+      case "integer": return makeInt(raw);
+      case "decimal": return makeDec(raw);
+      case "text": return makeText(raw);
+      case "boolean": return makeBool(raw);
+      default: throw new Error(`Internal error: unsupported REQUEST field type '${fieldType}' reached the interpreter unvalidated.`);
+    }
+  }
+
   callProcedure(name, argValues, span) {
     const proc = this.procedures.get(name);
     if (!proc) {
@@ -286,13 +340,28 @@ export class Interpreter {
     if (proc.native) return proc.native(argValues, span); // ADR-007
     const env = this.globalEnv.child(); // §8.3 — parent is global scope, not the call site.
     proc.params.forEach((p, i) => env.defineLocal(p, argValues[i]));
+    return this.runBlockForValue(proc.body, env);
+  }
+
+  // ADR-014 — runs one API handler's body for a single HTTP request, fresh
+  // each time (a child of global scope, exactly like a procedure call with
+  // no parameters) but against the SAME globalEnv/store every other
+  // request and the original `nova serve` boot run already share - this
+  // is what makes SAVE/GET inside a handler genuinely live across requests,
+  // unlike PAGE's build-time-only snapshot (ADR-012).
+  // ADR-015 — `requestBody` is the POST body's already-JSON.parse()d JS
+  // value (or null - no body/invalid JSON/not a POST), set for exactly the
+  // duration of this one call so RequestExpression can read it. Cleared
+  // in a finally so a later GET request (or a POST with no body) never
+  // sees a stale value from an earlier request on the same interpreter.
+  invokeApiHandler(statements, requestBody = null) {
+    const env = this.globalEnv.child();
+    this.currentRequestBody = requestBody;
     try {
-      this.execStatements(proc.body, env);
-    } catch (e) {
-      if (e instanceof ReturnSignal) return e.value;
-      throw e;
+      return this.runBlockForValue(statements, env);
+    } finally {
+      this.currentRequestBody = null;
     }
-    return NONE;
   }
 
   evaluate(expr, env) {
@@ -390,6 +459,33 @@ export class Interpreter {
           );
         }
         return makeText(line);
+      }
+
+      case "RequestExpression": {
+        const body = this.currentRequestBody;
+        if (body === null || typeof body !== "object" || Array.isArray(body)) {
+          runtimeError(
+            CODES.REQUEST_BODY_NOT_OBJECT,
+            `REQUEST AS ${expr.typeName} requires a JSON object in the request body, but ${body === null ? "none was sent (or it wasn't valid JSON)" : "this wasn't one"}.`,
+            expr.span
+          );
+        }
+        const fields = this.dataTypeFields.get(expr.typeName);
+        const values = {};
+        for (const field of fields) {
+          const raw = body[field.name];
+          if (!this.jsonMatchesFieldType(raw, field.type)) {
+            runtimeError(
+              CODES.REQUEST_BODY_FIELD_MISMATCH,
+              Object.prototype.hasOwnProperty.call(body, field.name)
+                ? `The request body's "${field.name}" field must be ${field.type}, but it wasn't.`
+                : `The request body is missing required field "${field.name}" (${field.type}).`,
+              expr.span
+            );
+          }
+          values[field.name] = this.jsonToValue(raw, field.type);
+        }
+        return makeRecord(values); // extra fields in `body` beyond `fields` are silently ignored (ADR-015)
       }
 
       default:

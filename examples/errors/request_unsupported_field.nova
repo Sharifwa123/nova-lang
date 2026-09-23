@@ -1,0 +1,14 @@
+# expect: E-SEM-043
+DATA Address
+    city: text
+END
+DATA Customer
+    name: text
+    home: Address
+END
+SERVICE
+    API POST "/x"
+        SET c = REQUEST AS Customer
+        RETURN c
+    END
+END
