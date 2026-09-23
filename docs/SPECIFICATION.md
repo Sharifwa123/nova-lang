@@ -1350,3 +1350,47 @@ New diagnostics:
 Everything else in §1–§17 and the v0.2–v0.15 amendments above is
 unchanged — a `PAGE` with no `FORM`, and `nova build` itself, keep their
 exact current behavior.
+
+## v0.17 Amendments — Durable Persistence for `nova serve` (ADR-018)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-018-durable-persistence.md](adr/ADR-018-durable-persistence.md)
+for full rationale.
+
+**No grammar, keyword, or diagnostic changes.** `SAVE`/`GET`/`DELETE`
+(§9, ADR-006) keep their exact existing syntax and semantics. This
+amendment is entirely a `nova serve` (ADR-014) runtime/CLI concern: `nova
+run` and `nova build` are unchanged and remain in-memory-only.
+
+DECISION: `nova serve path/to/app.nova [port]` now reads and writes
+`path/to/app.nova.data.json` — the store's own `{ type, value }`-tagged
+shape (values.js), wrapped in a small versioned envelope
+(`{ novaDataFormat: 1, store: {...} }`), written atomically (temp file +
+rename) after the boot run and after every request that reaches a
+declared `API` handler. On the next `nova serve` of the same file, that
+file (if present) is loaded into the store **before** the boot run
+executes, so the process's own `SAVE`/`GET`/`DELETE` state now survives a
+real restart, not just requests within one already-running process (which
+already worked, since ADR-014).
+
+DECISION: a program's own top-level `SAVE` statements still run on every
+boot, unchanged — durability does not make the interpreter skip them. A
+program that seeds data unconditionally is expected to guard it itself,
+using existing NOVA (`IF LENGTH(GET Product) == 0 ... END` around the
+seed `SAVE`s), not a new interpreter concept. This is a direct, deliberate
+consequence of keeping the store's own on-disk format the single source
+of truth, with zero new language surface.
+
+```nova
+DATA Product
+    name: text
+    price: decimal
+END
+
+IF LENGTH(GET Product) == 0
+    SAVE { name: "Widget", price: 9.99 }
+END
+```
+
+Everything else in §1–§17 and the v0.2–v0.16 amendments above is
+unchanged.

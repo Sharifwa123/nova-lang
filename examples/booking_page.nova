@@ -10,6 +10,9 @@
 # just the API routes) - that's what makes CALL API's same-origin fetch
 # meaningful at all. `nova build` still works exactly as before (a static
 # snapshot, no server) - only `nova serve` connects PAGE and SERVICE/API.
+#
+# v0.17 (ADR-018): `nova serve` is now durable across restarts, so the IF
+# guard below stops the two seed rooms from being re-added every restart.
 
 DATA Room
     number: integer
@@ -28,8 +31,10 @@ DO makeRoom RETURNS Room
     RETURN { number: n, roomType: t, pricePerNight: price }
 END
 
-SAVE makeRoom(101, "Single", 79.00)
-SAVE makeRoom(201, "Double", 119.00)
+IF LENGTH(GET Room) == 0
+    SAVE makeRoom(101, "Single", 79.00)
+    SAVE makeRoom(201, "Double", 119.00)
+END
 
 PAGE "/"
     TITLE "Book a Room"

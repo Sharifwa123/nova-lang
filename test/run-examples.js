@@ -7,6 +7,7 @@ import { spawnSync, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
+import { deleteStoreFileIfExists } from "../src/persistence/store.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, "..");
@@ -196,6 +197,11 @@ console.log("\n== PAGE compiler (nova build, expect exit 0 + real output files) 
 console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) ==");
 {
   const source = path.join(examplesDir, "api_service.nova");
+  const dataFile = `${source}.data.json`;
+  // ADR-018 — `nova serve` is now durable, so a stray data file from a
+  // prior run of this test would break the exact-count assertions below.
+  // Guaranteeing a clean slate is this test's own job now, not the CLI's.
+  deleteStoreFileIfExists(dataFile);
   let ok = false;
   let failureDetail = "";
   const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -260,6 +266,7 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
     failureDetail = String(e.stack ?? e);
   } finally {
     child.kill();
+    deleteStoreFileIfExists(dataFile);
   }
 
   if (ok) {
@@ -285,6 +292,8 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
 console.log("\n== PAGE + SERVICE integration (nova serve, expect a real click to really book a room) ==");
 {
   const source = path.join(examplesDir, "booking_page.nova");
+  const dataFile = `${source}.data.json`;
+  deleteStoreFileIfExists(dataFile); // ADR-018 — see the api_service.nova block above
   let ok = false;
   let failureDetail = "";
   const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -346,6 +355,7 @@ console.log("\n== PAGE + SERVICE integration (nova serve, expect a real click to
     failureDetail = String(e.stack ?? e);
   } finally {
     child.kill();
+    deleteStoreFileIfExists(dataFile);
   }
 
   if (ok) {
@@ -366,6 +376,8 @@ console.log("\n== PAGE + SERVICE integration (nova serve, expect a real click to
 console.log("\n== PAGE FORM (nova serve, expect typed input to really reach the API) ==");
 {
   const source = path.join(examplesDir, "guest_book.nova");
+  const dataFile = `${source}.data.json`;
+  deleteStoreFileIfExists(dataFile); // ADR-018 — see the api_service.nova block above
   let ok = false;
   let failureDetail = "";
   const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
@@ -430,6 +442,7 @@ console.log("\n== PAGE FORM (nova serve, expect typed input to really reach the 
     failureDetail = String(e.stack ?? e);
   } finally {
     child.kill();
+    deleteStoreFileIfExists(dataFile);
   }
 
   if (ok) {
@@ -437,6 +450,90 @@ console.log("\n== PAGE FORM (nova serve, expect typed input to really reach the 
     passed++;
   } else {
     console.log(`  FAIL guest_book.nova serve`);
+    console.log(indent(failureDetail));
+    failed++;
+  }
+}
+
+// ADR-018 — durable persistence: the actual payoff is a genuine process
+// restart, not just requests against one long-running process (every check
+// above already covers that). Spawn `nova serve`, add a product over real
+// HTTP, kill the process, spawn a SECOND, completely separate process
+// against the same file, and confirm both the seeded AND the added data
+// are still there - and that the seed guard (IF LENGTH(GET Product) == 0
+// in api_service.nova) stopped the seed products from being re-added.
+console.log("\n== Durable persistence (nova serve, expect data to survive a real restart) ==");
+{
+  const source = path.join(examplesDir, "api_service.nova");
+  const dataFile = `${source}.data.json`;
+  deleteStoreFileIfExists(dataFile);
+  let ok = false;
+  let failureDetail = "";
+
+  function spawnServe() {
+    const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdoutBuf = "";
+    const port = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timed out waiting for the server to report it's listening.")), 5000);
+      child.stdout.on("data", (chunk) => {
+        stdoutBuf += chunk.toString();
+        const m = stdoutBuf.match(/listening on http:\/\/localhost:(\d+)/);
+        if (m) {
+          clearTimeout(timer);
+          resolve(Number(m[1]));
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error(`Server process exited early (code ${code}).`));
+      });
+    });
+    return { child, port };
+  }
+
+  let first, second;
+  try {
+    first = spawnServe();
+    const port1 = await first.port;
+    const beforeRestart = await (await fetch(`http://localhost:${port1}/products`)).json();
+    await fetch(`http://localhost:${port1}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Doohickey", price: 2.5 }),
+    });
+    const beforeKill = await (await fetch(`http://localhost:${port1}/products`)).json();
+    first.child.kill();
+    await new Promise((resolve) => first.child.on("exit", resolve));
+
+    // A genuinely separate process, started fresh, reading the same
+    // <file>.nova.data.json the first process wrote.
+    second = spawnServe();
+    const port2 = await second.port;
+    const afterRestart = await (await fetch(`http://localhost:${port2}/products`)).json();
+
+    ok =
+      beforeRestart.length === 2 && // the two seeded products, first boot
+      beforeKill.length === 3 && // + the one added over HTTP, same process
+      afterRestart.length === 3 && // survived the restart intact
+      afterRestart.some((p) => p.name === "Doohickey" && p.price === 2.5) &&
+      // the seed guard stopped a second boot from re-adding the seed pair
+      afterRestart.filter((p) => p.name === "Widget").length === 1;
+    if (!ok) {
+      failureDetail = `beforeRestart=${JSON.stringify(beforeRestart)} beforeKill=${JSON.stringify(beforeKill)} afterRestart=${JSON.stringify(afterRestart)}`;
+    }
+  } catch (e) {
+    failureDetail = String(e.stack ?? e);
+  } finally {
+    first?.child.kill();
+    second?.child.kill();
+    deleteStoreFileIfExists(dataFile);
+  }
+
+  if (ok) {
+    console.log(`  OK   api_service.nova serve, restarted -> seeded + added data both survived, no re-seed`);
+    passed++;
+  } else {
+    console.log(`  FAIL api_service.nova serve, restarted`);
     console.log(indent(failureDetail));
     failed++;
   }
