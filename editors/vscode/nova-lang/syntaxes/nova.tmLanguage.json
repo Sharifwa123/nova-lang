@@ -1,0 +1,125 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "NOVA",
+  "scopeName": "source.nova",
+  "fileTypes": ["nova"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#data-declaration" },
+    { "include": "#procedure-declaration" },
+    { "include": "#control-keywords" },
+    { "include": "#declaration-keywords" },
+    { "include": "#statement-keywords" },
+    { "include": "#other-keywords" },
+    { "include": "#page-element-keywords" },
+    { "include": "#boolean-constants" },
+    { "include": "#word-operators" },
+    { "include": "#reserved-keywords" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "match": "#.*$",
+          "name": "comment.line.number-sign.nova"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.nova" } },
+          "end": "\"",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.nova" } },
+          "name": "string.quoted.double.nova",
+          "patterns": [
+            {
+              "match": "\\\\[\"\\\\nt]",
+              "name": "constant.character.escape.nova"
+            },
+            {
+              "begin": "\\{",
+              "beginCaptures": { "0": { "name": "punctuation.definition.interpolation.begin.nova" } },
+              "end": "\\}",
+              "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.nova" } },
+              "name": "meta.interpolation.nova",
+              "patterns": [
+                { "match": "[A-Za-z_][A-Za-z0-9_]*", "name": "variable.other.interpolated.nova" },
+                { "match": "\\.", "name": "punctuation.accessor.nova" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b\\d+(\\.\\d+)?\\b",
+          "name": "constant.numeric.nova"
+        }
+      ]
+    },
+    "data-declaration": {
+      "match": "\\b(DATA)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "storage.type.nova" },
+        "2": { "name": "entity.name.type.nova" }
+      }
+    },
+    "procedure-declaration": {
+      "match": "\\b(DO)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "storage.type.function.nova" },
+        "2": { "name": "entity.name.function.nova" }
+      }
+    },
+    "control-keywords": {
+      "match": "\\b(IF|ELSE|END|FOR|EACH|IN|REPEAT|TIMES|RETURN|TRY|CATCH|WHEN|CLICKED)\\b",
+      "name": "keyword.control.nova"
+    },
+    "declaration-keywords": {
+      "match": "\\b(DO|DATA|SERVICE|API|PAGE)\\b",
+      "name": "storage.type.nova"
+    },
+    "statement-keywords": {
+      "match": "\\b(SET|CHANGE|SHOW)\\b",
+      "name": "keyword.control.nova"
+    },
+    "other-keywords": {
+      "match": "\\b(RETURNS|INPUT|AS|SAVE|GET|DELETE|ASK|REQUEST|POST)\\b",
+      "name": "keyword.other.nova"
+    },
+    "page-element-keywords": {
+      "match": "\\b(STYLE|TITLE|HEADING|TEXT|BUTTON)\\b",
+      "name": "entity.name.tag.nova"
+    },
+    "boolean-constants": {
+      "match": "\\b(TRUE|FALSE)\\b",
+      "name": "constant.language.boolean.nova"
+    },
+    "word-operators": {
+      "match": "\\b(AND|OR|NOT)\\b",
+      "name": "keyword.operator.word.nova"
+    },
+    "reserved-keywords": {
+      "match": "\\b(SCREEN|SECURITY|USE|GO|TO|CREATE)\\b",
+      "name": "keyword.other.reserved.nova"
+    },
+    "operators": {
+      "match": "==|!=|<=|>=|=|<|>|\\+|-|\\*|/",
+      "name": "keyword.operator.nova"
+    },
+    "punctuation": {
+      "patterns": [
+        { "match": "[()\\[\\]{}]", "name": "punctuation.nova" },
+        { "match": "[,:.]", "name": "punctuation.separator.nova" }
+      ]
+    }
+  }
+}
