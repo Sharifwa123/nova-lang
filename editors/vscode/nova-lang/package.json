@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "nova-lang",
   "private": true,
+  "icon": "images/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
