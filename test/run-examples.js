@@ -245,6 +245,18 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
     });
     const productsAfterPost = await (await fetch(`http://localhost:${port}/products`)).json();
 
+    // ADR-019 — API DELETE + path parameters: real end-to-end against the
+    // spawned server, not an in-process assertion. Widget was the first
+    // seed SAVE, so it has id 1; a non-integer segment in the same route
+    // shape must NOT match at all (falls through to the ordinary 404, not
+    // a 500 from a failed integer parse inside the handler).
+    const nonIntegerId = await fetch(`http://localhost:${port}/products/not-a-number`, { method: "DELETE" });
+    const deleted = await fetch(`http://localhost:${port}/products/1`, { method: "DELETE" });
+    const productsAfterDelete = await (await fetch(`http://localhost:${port}/products`)).json();
+    // Deleting an already-gone id is still a defined no-op (ADR-006),
+    // unchanged by path-parameter routing.
+    const deleteAgain = await fetch(`http://localhost:${port}/products/1`, { method: "DELETE" });
+
     ok =
       hello.status === 200 &&
       helloBody === "Hello from NOVA" &&
@@ -258,9 +270,14 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
       createdBody.name === "Sprocket" &&
       createdBody.price === 4.25 &&
       badPost.status === 400 &&
-      productsAfterPost.length === 3;
+      productsAfterPost.length === 3 &&
+      nonIntegerId.status === 404 &&
+      deleted.status === 200 &&
+      productsAfterDelete.length === 2 &&
+      !productsAfterDelete.some((p) => p.name === "Widget") &&
+      deleteAgain.status === 200;
     if (!ok) {
-      failureDetail = `hello=${JSON.stringify(helloBody)} products=${JSON.stringify(productsBody)} missing.status=${missing.status} created.status=${created.status} createdBody=${JSON.stringify(createdBody)} badPost.status=${badPost.status} productsAfterPost=${JSON.stringify(productsAfterPost)}`;
+      failureDetail = `hello=${JSON.stringify(helloBody)} products=${JSON.stringify(productsBody)} missing.status=${missing.status} created.status=${created.status} createdBody=${JSON.stringify(createdBody)} badPost.status=${badPost.status} productsAfterPost=${JSON.stringify(productsAfterPost)} nonIntegerId.status=${nonIntegerId.status} deleted.status=${deleted.status} productsAfterDelete=${JSON.stringify(productsAfterDelete)} deleteAgain.status=${deleteAgain.status}`;
     }
   } catch (e) {
     failureDetail = String(e.stack ?? e);

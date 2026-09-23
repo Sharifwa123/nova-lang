@@ -354,8 +354,16 @@ export class Interpreter {
   // duration of this one call so RequestExpression can read it. Cleared
   // in a finally so a later GET request (or a POST with no body) never
   // sees a stale value from an earlier request on the same interpreter.
-  invokeApiHandler(statements, requestBody = null) {
+  // ADR-019 — `pathParams` is a plain { name: number } object (already
+  // matched and integer-parsed by the server, src/apiserver/routePattern.js),
+  // bound into the handler's own environment exactly like a procedure call
+  // binds its parameters (callProcedure, above) - the analyzer already
+  // guarantees every name here is a real path parameter of the right type.
+  invokeApiHandler(statements, requestBody = null, pathParams = {}) {
     const env = this.globalEnv.child();
+    for (const [name, value] of Object.entries(pathParams)) {
+      env.defineLocal(name, makeInt(value));
+    }
     this.currentRequestBody = requestBody;
     try {
       return this.runBlockForValue(statements, env);

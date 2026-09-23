@@ -6,6 +6,7 @@ import { Scope } from "./scope.js";
 import { Diagnostic, NovaError } from "../diagnostics/diagnostic.js";
 import { CODES } from "../diagnostics/codes.js";
 import { BUILTINS } from "../stdlib/builtins.js";
+import { parseRoutePattern, isValidParamName, routeShapeKey } from "../apiserver/routePattern.js";
 
 function err(code, message, span, explanation = null, suggestion = null, relatedSpans = []) {
   throw new NovaError(
@@ -77,6 +78,7 @@ export class Analyzer {
     this.dataTypes = new Map(); // name -> { node, fields: [{name, type}] }
     this.pages = new Map(); // ADR-011 — route -> PageDeclaration node
     this.apiRoutes = new Map(); // ADR-014 — "<METHOD> <route>" -> api declaration
+    this.apiRouteShapes = new Map(); // ADR-019 — "<METHOD> <shape>" -> api declaration (param names collapsed)
     this.topLevelServices = new Set(); // which ServiceDeclaration nodes were seen at genuine top level (see checkStatement)
     this.currentApiMethod = null; // ADR-015 — the API method whose body is currently being checked, or null
     this.globalScope = new Scope();
@@ -301,6 +303,36 @@ export class Analyzer {
           `Use "/${api.route}" or similar.`
         );
       }
+
+      // ADR-019 — a ":name" segment is a path parameter, always integer
+      // (the only kind of id SAVE ever produces, ADR-006). Validated here,
+      // before the uniqueness checks below, so a malformed name is
+      // reported on its own even if the route also happens to collide.
+      const pattern = parseRoutePattern(api.route);
+      const seenParamNames = new Set();
+      for (const seg of pattern) {
+        if (seg.kind !== "param") continue;
+        if (!isValidParamName(seg.name)) {
+          err(
+            CODES.INVALID_PATH_PARAM_NAME,
+            `":${seg.name}" isn't a usable path parameter name in "${api.route}".`,
+            api.routeSpan,
+            "A path parameter name must be a plain identifier and cannot be a NOVA keyword - it becomes a variable inside the handler's body, and a keyword spelling could never actually be referenced there.",
+            "Use a plain name, e.g. \":id\"."
+          );
+        }
+        if (seenParamNames.has(seg.name)) {
+          err(
+            CODES.DUPLICATE_PATH_PARAM_NAME,
+            `":${seg.name}" appears more than once in "${api.route}".`,
+            api.routeSpan,
+            "Each path parameter in one route must have a unique name.",
+            "Rename one of them."
+          );
+        }
+        seenParamNames.add(seg.name);
+      }
+
       const key = `${api.method} ${api.route}`;
       if (this.apiRoutes.has(key)) {
         err(
@@ -312,6 +344,25 @@ export class Analyzer {
           [[this.apiRoutes.get(key).routeSpan, "Previous API with this route"]]
         );
       }
+
+      // ADR-019 — two routes whose SHAPE collides (same segment count,
+      // same static-vs-param pattern, differing only in a param's name)
+      // are just as ambiguous at request time as an exact duplicate -
+      // "/products/:id" and "/products/:pid" (same method) could both
+      // match one real request.
+      const shapeKey = `${api.method} ${routeShapeKey(pattern)}`;
+      if (this.apiRouteShapes.has(shapeKey)) {
+        err(
+          CODES.AMBIGUOUS_API_ROUTE_SHAPE,
+          `The route "${api.route}" (${api.method}) is ambiguous with another API's route - they only differ in a path parameter's name.`,
+          api.routeSpan,
+          "Two routes with the same method and the same static/parameter shape could both match one real request.",
+          "Use a genuinely different route shape, or merge the two into one.",
+          [[this.apiRouteShapes.get(shapeKey).routeSpan, "Previous API with this route shape"]]
+        );
+      }
+      this.apiRouteShapes.set(shapeKey, api);
+
       this.apiRoutes.set(key, api);
     }
   }
@@ -1102,6 +1153,15 @@ export class Analyzer {
         // RETURNS procedure exactly - falls through to NONE/null).
         for (const api of stmt.apis) {
           const apiScope = this.globalScope.child();
+          // ADR-019 — each ":name" path parameter (already validated by
+          // registerService) becomes an ordinary integer local, exactly
+          // like a DO procedure's own INPUT parameter - so a handler body
+          // referencing it (e.g. DELETE Product id) is just an ordinary,
+          // already-typed statement, no special-casing needed anywhere
+          // else in the analyzer.
+          for (const seg of parseRoutePattern(api.route)) {
+            if (seg.kind === "param") apiScope.defineLocal(seg.name, "integer");
+          }
           // ADR-015 — tracks which API method's body is currently being
           // checked, so REQUEST (below, in infer()) can be statically
           // restricted to POST handlers only. A single instance field, not
