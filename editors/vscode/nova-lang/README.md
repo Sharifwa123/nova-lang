@@ -19,11 +19,35 @@ All commands open (or reuse) an integrated terminal named **NOVA** and run
 the real CLI there — full color output and real stdin for `ASK` behave
 exactly like running it by hand.
 
-## Install (no build step, zero dependencies)
+## Install
 
-This extension is plain JavaScript with no `npm install` required. Copy
-(or symlink) this folder into your VS Code extensions directory, then
-reload VS Code:
+This extension isn't published on the VS Code Marketplace, so searching
+for "NOVA" in the Extensions view's search box won't find it — that
+search only reaches the public Marketplace, not this repository. Two
+ways to actually install it:
+
+### Option A — Install from VSIX (uses the Extensions tab's own UI)
+
+1. Build the package (one-off, packaging-only — nothing gets added to
+   this repository's own dependencies):
+   ```bash
+   cd editors/vscode/nova-lang
+   npx --yes @vscode/vsce package
+   ```
+   This writes `nova-lang-0.1.0.vsix` in that folder.
+2. In VS Code, open the **Extensions** view (`Ctrl+Shift+X` /
+   `Cmd+Shift+X`), click the `...` (More Actions) menu at the top of that
+   panel, choose **Install from VSIX...**, and pick the `.vsix` file you
+   just built.
+3. Reload if prompted. Open any `.nova` file and the Run/Build/Serve
+   buttons appear in the editor's top-right corner.
+
+Equivalently, from the command line:
+```bash
+code --install-extension editors/vscode/nova-lang/nova-lang-0.1.0.vsix
+```
+
+### Option B — Copy into your extensions folder (no build step at all)
 
 ```bash
 # macOS/Linux
@@ -32,23 +56,9 @@ cp -r editors/vscode/nova-lang ~/.vscode/extensions/nova-lang-0.1.0
 # Windows (PowerShell)
 Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\nova-lang-0.1.0"
 ```
-
-Then run **Developer: Reload Window** from the Command Palette (or just
-restart VS Code). Open any `.nova` file and the Run/Build/Serve buttons
-appear in the editor's top-right corner.
-
-### Packaging a real .vsix (optional)
-
-If you'd rather install it through the Extensions view like any other
-extension:
-
-```bash
-npx --yes @vscode/vsce package
-code --install-extension nova-lang-0.1.0.vsix
-```
-
-(`vsce` here is a one-off `npx` call for packaging only — nothing gets
-added to this repository's own dependencies.)
+Then run **Developer: Reload Window** from the Command Palette (or
+restart VS Code). This won't show up in the Extensions list as an
+"installed" card the way Option A does, but it works identically.
 
 ## Settings
 
