@@ -846,6 +846,33 @@ A `SERVICE` block holds any number of `API` routes. Each is either:
   doesn't match — wrong shape, missing field, wrong field type — the
   client gets back an HTTP `400` automatically; your handler code never
   even runs for a malformed request.
+- **`API DELETE "/route"`** — same as `GET`: an ordinary statement block,
+  whatever it `RETURN`s becomes the response body (or `null`, unmatched).
+  `REQUEST AS` isn't available here — like `GET`, it's `POST`-only.
+
+A route may contain **path parameters**: a segment written `:name` (e.g.
+`"/products/:id"`) is always an `integer` — the only kind of id `SAVE`
+ever produces (§13) — bound inside the handler body as an ordinary local,
+exactly like a `DO` procedure's own `INPUT` parameter:
+
+```nova
+SERVICE
+    API DELETE "/products/:id"
+        DELETE Product id
+    END
+END
+```
+
+```bash
+curl -X DELETE http://localhost:3000/products/5
+```
+
+A real request whose path segment isn't a whole number (`/products/abc`)
+simply doesn't match this route at all — an ordinary `404`, not an error
+from inside your handler. Two routes with the same method that only
+differ in a parameter's *name* (`/products/:id` vs `/products/:pid`) are
+rejected at compile time as ambiguous — they could both match the same
+real request.
 
 A route must start with `/`, and no two `API` declarations in a file may
 share the same method and route. `API` handler bodies are genuine,
@@ -1058,6 +1085,9 @@ can ever see).
 | E-SEM-050 | `FORM` declared somewhere other than a `PAGE`'s top level |
 | E-SEM-051 | Duplicate `INPUT` name within one `FORM` |
 | E-SEM-052 | `INPUT` with a non-`integer`/`decimal`/`text`/`boolean` type |
+| E-SEM-053 | A path parameter's name isn't a valid identifier, or is a NOVA keyword |
+| E-SEM-054 | The same path parameter name appears more than once in one route |
+| E-SEM-055 | Two `API` routes with the same method have colliding shapes (differ only in a parameter's name) |
 | E-RUN-001 | Division by zero |
 | E-RUN-002 | No such field on a record |
 | E-RUN-003 | A built-in called with an unsupported argument type |

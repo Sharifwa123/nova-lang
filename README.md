@@ -10,7 +10,7 @@ while remaining precise enough for a real compiler pipeline — one language
 meant to eventually span core logic, data, UI, and APIs, instead of
 stitching together a different language per layer.
 
-This repository implements **v0.1 through v0.17**: v0.1–v0.12 is every
+This repository implements **v0.1 through v0.18**: v0.1–v0.12 is every
 milestone in the language's core design roadmap — lexer → parser → AST →
 semantic analyzer → tree-walking interpreter, covering the core language
 (SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
@@ -18,7 +18,7 @@ procedures, `DATA` named types, persistence (`SAVE`/`GET`/`DELETE`), a
 small stdlib, `ASK` input, list indexing/mutation, `TRY`/`CATCH` error
 handling, and a `PAGE` compiler (`nova build`) spanning static HTML,
 data-bound content, and real client-side interactivity (`BUTTON`/`WHEN
-CLICKED` compiled to JavaScript). v0.13 through v0.17 are the milestones
+CLICKED` compiled to JavaScript). v0.13 through v0.18 are the milestones
 past that original roadmap: `SERVICE`/`API` compile to a real, live HTTP
 server (`nova serve`) sharing one persistence store across every request,
 with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>` (v0.14) reading
@@ -29,8 +29,10 @@ handler can `CALL API` a declared endpoint and reflect the real result;
 v0.16 adds `FORM`/`INPUT` so a page can collect genuinely typed user input
 and send it to that same live API; v0.17 makes `nova serve` durable — data
 now survives a real restart of the server process, with no new syntax and
-no new dependency — so backend, API, and frontend can genuinely be
-written, run, and kept running together from one file. Start with
+no new dependency; v0.18 adds `API DELETE` and path parameters (`:id`,
+always an integer) so a route can finally address one specific record —
+so backend, API, and frontend can genuinely be written, run, and kept
+running together from one file. Start with
 [docs/LANGUAGE_GUIDE.md](docs/LANGUAGE_GUIDE.md) to learn the language and
 write programs; see [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the
 binding language specification, and [HANDOFF.md](HANDOFF.md) for project
@@ -84,9 +86,11 @@ node src/cli.js serve examples/api_service.nova 3000      # live HTTP server (SE
 #   curl http://localhost:3000/hello
 #   curl http://localhost:3000/products
 #   curl -X POST -d '{"name":"Sprocket","price":4.25}' http://localhost:3000/products
+#   curl -X DELETE http://localhost:3000/products/1   # path parameter: :id
 # stop the server (Ctrl+C) and run the same command again - your Sprocket
-# is still there. `nova serve` is durable: it wrote
-# examples/api_service.nova.data.json next to the source file.
+# is still there (Widget isn't, since you just deleted it). `nova serve`
+# is durable: it wrote examples/api_service.nova.data.json next to the
+# source file.
 
 node src/cli.js serve examples/booking_page.nova 3000     # PAGE + SERVICE together
 # open http://localhost:3000/ in a browser and click "Book Now" - it

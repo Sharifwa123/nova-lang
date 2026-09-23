@@ -203,9 +203,9 @@ SERVICE
 END`);
 });
 
-test("v0.13: only GET/POST are accepted after API (ADR-015 adds POST) - any other word is a plain parse error", () => {
+test("v0.13: only GET/POST/DELETE are accepted after API (ADR-015 adds POST, ADR-019 adds DELETE) - any other word is a plain parse error", () => {
   assertThrows(
-    () => compile('SERVICE\n    API DELETE "/x"\n        RETURN 1\n    END\nEND'),
+    () => compile('SERVICE\n    API PUT "/x"\n        RETURN 1\n    END\nEND'),
     (e) => assertEqual(e.diagnostic.code, CODES.UNEXPECTED_TOKEN)
   );
 });

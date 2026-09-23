@@ -6,7 +6,7 @@ Read this section first; the rest of the file is the detailed history and
 rationale behind it.
 
 **State**: v0.1 through v0.12 (the entire originally-planned roadmap) plus
-v0.13-v0.17 — the milestones past it: `SERVICE`/`API`, a real, live HTTP
+v0.13-v0.18 — the milestones past it: `SERVICE`/`API`, a real, live HTTP
 server, with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>` (v0.14,
 reading/validating the real JSON request body); v0.15 connects `PAGE` and
 `SERVICE` for the first time — `nova serve` now serves compiled `PAGE`
@@ -17,19 +17,23 @@ input (not just data already known at build time) and send it to that
 same live API; v0.17 makes `nova serve` durable — `SAVE`/`GET`/`DELETE`
 data now survives a real restart of the server process (a JSON file next
 to the source, no new syntax, no new dependency), not just requests
-within one already-running process. All verified with a real spawned
-server, a real browser-equivalent script execution (typed/checked DOM
-values included), and — for v0.17 specifically — a real process kill and
-a second, separate real process reading back what the first one wrote
-(`test/run-examples.js`).
-304 unit tests, 57 examples verified through the *real* CLI (not just
-in-process calls), 18 ADRs, zero npm dependencies, MIT licensed. Verify it
+within one already-running process; v0.18 adds `API DELETE` and path
+parameters — a route segment like `:id` is always an `integer` (the only
+kind of id `SAVE` ever produces), bound inside the handler body exactly
+like a procedure's own `INPUT` parameter, so `DELETE /products/:id` is
+finally expressible. All verified with a real spawned server, a real
+browser-equivalent script execution (typed/checked DOM values included),
+a real process kill and a second, separate real process reading back what
+the first one wrote (v0.17), and a real `curl -X DELETE` against a real
+spawned server (v0.18) (`test/run-examples.js`).
+323 unit tests, 57 examples verified through the *real* CLI (not just
+in-process calls), 19 ADRs, zero npm dependencies, MIT licensed. Verify it
 yourself before doing anything else:
 ```bash
 git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
 node test/run.js && node test/run-examples.js
 ```
-If that's not 304/304 and 57/57, something's wrong with *your*
+If that's not 323/323 and 57/57, something's wrong with *your*
 environment, not the code — stop and figure out why before writing
 anything new.
 
@@ -57,30 +61,33 @@ anything new.
 
 **What's actually next**, per this file's own roadmap section below —
 genuinely new ground (v0.13's `SERVICE`/`API`, v0.14's `POST`/`REQUEST AS`,
-v0.15's `PAGE`/`SERVICE` integration, v0.16's `FORM`/`INPUT`, and v0.17's
-durable `nova serve` persistence were the first five pieces of this list;
-see ADR-014/ADR-015/ADR-016/ADR-017/ADR-018). The order below is a
+v0.15's `PAGE`/`SERVICE` integration, v0.16's `FORM`/`INPUT`, v0.17's
+durable `nova serve` persistence, and v0.18's `API DELETE` + path
+parameters were the first six pieces of this list; see
+ADR-014/ADR-015/ADR-016/ADR-017/ADR-018/ADR-019). The order below is a
 full-stack-app priority order, not just "whatever's next":
-1. **`PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
-   routing** — v0.14 added `POST` (with `REQUEST AS <DataType>` validating
-   the JSON body against a flat, primitive-only `DATA` shape); `PUT`
-   implies "update this existing id" and `DELETE` needs no body at all,
-   each a distinct enough question that ADR-015 deliberately left them
-   for later. Also still deferred: nested `DATA`/`list`/`record` fields
-   in a `REQUEST AS` shape. This is the next milestone.
-2. Auth/security basics (`SECURITY`, still reserved).
-3. Real layout — containers/images; today `PAGE` compiles to bare
+1. **Auth/security basics** (`SECURITY`, still reserved). This is the next
+   milestone.
+2. Real layout — containers/images; today `PAGE` compiles to bare
    `<h1>`/`<p>`/`<button>`/`<input>` tags with no wrapping elements, so
    layout is CSS-positional-selector-only.
-4. SPA navigation — every `PAGE` is currently its own served route with a
+3. SPA navigation — every `PAGE` is currently its own served route with a
    full page load; no client-side route transitions.
 
-Also still deferred, lower priority than the above: a developer-chosen
-success/failure label for `CALL API` (currently a fixed `"Done"`/`"Failed
-- try again"` — see ADR-016's explicitly deferred list), and statically
-cross-checking a `CALL API` payload's shape against its target handler's
-own `REQUEST AS` type (currently only checked at runtime, like any other
-client).
+Also still deferred, lower priority than the above: `PUT` and a
+single-record `GET` by id — both deliberately left out of v0.18 (ADR-019)
+because they need a real "fetch/replace one record by its id" primitive
+that doesn't exist yet (`GET TypeName` returns every record with no id
+attached, ADR-006) — a genuinely separate design question from path
+parameters themselves, not just unimplemented; query-string parsing;
+nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape; a
+developer-chosen success/failure label for `CALL API` (currently a fixed
+`"Done"`/`"Failed - try again"` — see ADR-016's explicitly deferred
+list); statically cross-checking a `CALL API` payload's shape against its
+target handler's own `REQUEST AS` type (currently only checked at
+runtime, like any other client); and extending `CALL API` to `DELETE`
+(needs route interpolation to be genuinely useful from a page - a
+per-record delete button needs a dynamic route, ADR-019).
 
 **One specific warning**: the `PAGE` compiler (ADR-011/012/013) is the
 most structurally novel part of this codebase — first compilation target
@@ -312,9 +319,12 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   there's no client-side validation (required fields, min/max, pattern
   matching) — an empty/malformed field is sent to the API as-is and only
   caught by the server's own `REQUEST AS` check.
-- `API` supports only `GET` and `POST` (ADR-014/ADR-015) — no `PUT`/
-  `DELETE` yet. Routing is exact-match only: no path parameters
-  (`/products/:id`), no query-string parsing. The `ASK`-inside-a-handler
+- `API` supports `GET`, `POST`, and `DELETE` (ADR-014/ADR-015/ADR-019) —
+  still no `PUT`, deliberately (ADR-019 — it needs a "fetch/replace one
+  record by its id" primitive `GET`/`SAVE` don't have yet, a genuinely
+  separate question from `DELETE`/path parameters). Routing supports path
+  parameters (`:name`, always `integer` — v0.18, ADR-019) but still no
+  query-string parsing. The `ASK`-inside-a-handler
   check (`E-SEM-041`) is shallow by design: it only inspects a handler's
   own statements, not procedures it calls — a real, bounded,
   explicitly-named gap, not a soundness guarantee (the newer
@@ -337,37 +347,36 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 ## What's next
 
 **Every milestone in the v0.1–v0.12 roadmap is implemented, plus
-v0.13–v0.17 (`SERVICE`/`API`, ADR-014/ADR-015; `PAGE`/`SERVICE`
+v0.13–v0.18 (`SERVICE`/`API`, ADR-014/ADR-015; `PAGE`/`SERVICE`
 integration, ADR-016; `FORM`/`INPUT`, ADR-017; durable `nova serve`
-persistence, ADR-018) — the milestones past that roadmap.** What's left,
-in the priority order a full-stack app actually needs (see the briefing
-at the top of this file):
+persistence, ADR-018; `API DELETE` + path parameters, ADR-019) — the
+milestones past that roadmap.** What's left, in the priority order a
+full-stack app actually needs (see the briefing at the top of this file):
 
-1. **`PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
-   routing** — v0.14 added `POST` + `REQUEST AS <DataType>` (validated
-   against a flat, primitive-only `DATA` shape); `PUT` implies "update
-   this existing id" and `DELETE` needs no body at all, each its own real
-   design question ADR-015 deliberately left open. Also still open:
-   nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape. Next up.
-2. Auth/security basics (`SECURITY`, still forward-reserved).
-3. Real layout — `PAGE` today compiles to bare tags with no wrapping
+1. **Auth/security basics** (`SECURITY`, still forward-reserved). Next up.
+2. Real layout — `PAGE` today compiles to bare tags with no wrapping
    containers/images; layout is CSS-positional-selector-only.
-4. SPA navigation — no client-side route transitions yet; every `PAGE` is
+3. SPA navigation — no client-side route transitions yet; every `PAGE` is
    its own full page load.
-5. Mobile/desktop targets, native compilation/self-hosting — explicitly
+4. Mobile/desktop targets, native compilation/self-hosting — explicitly
    multi-month-plus territory.
 
-Lower priority than all of the above: a developer-chosen `CALL API`
-success/failure label, and statically cross-checking a `CALL API`
-payload's shape against its target handler's own `REQUEST AS` type — v0.15
-(ADR-016) deliberately shipped without either (a fixed label; a
-runtime-only shape check, same as any other client gets), and neither
-v0.16 (ADR-017) nor v0.17 (ADR-018) revisited it. Also lower priority:
-durability for `nova run`/`nova build` (ADR-018 scoped durability to
-`nova serve` only), and concurrent-writer safety for two `nova serve`
-processes sharing one data file.
+Lower priority than all of the above: `PUT` and a single-record `GET` by
+id — both deliberately deferred past v0.18 (ADR-019) because they need a
+real "fetch/replace one record by its id" primitive `GET`/`SAVE` don't
+have (`GET TypeName` returns every record with no id attached, ADR-006);
+query-string parsing; nested `DATA`/`list`/`record` fields in a `REQUEST
+AS` shape; a developer-chosen `CALL API` success/failure label, and
+statically cross-checking a `CALL API` payload's shape against its target
+handler's own `REQUEST AS` type — v0.15 (ADR-016) deliberately shipped
+without either (a fixed label; a runtime-only shape check, same as any
+other client gets), and none of v0.16/v0.17/v0.18 revisited it; extending
+`CALL API` to `DELETE` (needs route interpolation to be useful from a
+page, ADR-019); durability for `nova run`/`nova build` (ADR-018 scoped
+durability to `nova serve` only); and concurrent-writer safety for two
+`nova serve` processes sharing one data file.
 
-The process discipline that held for 18 milestones and is worth
+The process discipline that held for 19 milestones and is worth
 continuing for anything past this point: **ADR before implementation**
 for any real design decision, smallest-correct-version per milestone
 (resist doing three milestones' worth of surface in one pass), and

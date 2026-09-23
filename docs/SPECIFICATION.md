@@ -1394,3 +1394,77 @@ END
 
 Everything else in §1–§17 and the v0.2–v0.16 amendments above is
 unchanged.
+
+## v0.18 Amendments — API DELETE and Path Parameters (ADR-019)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-019-api-delete-path-params.md](adr/ADR-019-api-delete-path-params.md)
+for full rationale.
+
+**§14 (amended)** — `API` now accepts `DELETE` alongside `GET`/`POST`. No
+new keyword: `DELETE` is already active (the `DELETE` statement, ADR-006),
+reused as an HTTP method exactly the way `GET`/`POST` already are.
+`PUT` remains unsupported, deliberately deferred (see the ADR for why).
+
+**New grammar**:
+```
+api-declaration ::= "API" ("GET"|"POST"|"DELETE") string-literal
+                     NEWLINE statement* "END"
+```
+
+**Path parameters**: a route segment written `:name` (e.g. `API DELETE
+"/products/:id"`) is a path parameter, always typed `integer` — the only
+kind of id `SAVE` has ever produced (ADR-006). No new grammar or token:
+`:name` lives entirely inside the route's existing string literal: any
+segment starting with `:` is treated as a parameter, extracted and
+validated by a shared module (`src/apiserver/routePattern.js`) used
+identically by the analyzer and the server.
+
+Inside the handler body, each path parameter is bound as an ordinary
+`integer` local — exactly like a `DO` procedure's own `INPUT` parameter —
+so `DELETE Product id` in the example below is just an ordinary,
+already-typed statement:
+
+```nova
+DATA Product
+    name: text
+    price: decimal
+END
+
+SERVICE
+    API DELETE "/products/:id"
+        DELETE Product id
+    END
+END
+```
+
+A real request's path segment that doesn't parse as an integer simply
+doesn't match the route at all — an ordinary `404`, not a `500` from a
+failed conversion inside the handler.
+
+DECISION: a path parameter name must be a valid identifier and not a NOVA
+keyword (`E-SEM-053`); two parameters with the same name in one route is
+`E-SEM-054`. Two `API` declarations with the same method whose route
+*shapes* collide — same segment count and static/param pattern, differing
+only in a parameter's name (`/products/:id` vs `/products/:pid`) — is
+`E-SEM-055`, the same "don't let it be ambiguous" treatment `E-SEM-039`
+already gives two literally-identical routes.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-053 | A path parameter's name isn't a valid identifier, or is a NOVA keyword |
+| E-SEM-054 | The same path parameter name appears more than once in one route |
+| E-SEM-055 | Two API routes with the same method have colliding shapes (differ only in a parameter's name) |
+
+**Unchanged**: `CALL API` (ADR-016) — still `GET`/`POST` only, still a
+literal route with no interpolation. `PUT`, a single-record `GET` by id,
+and query-string parsing remain deferred (see the ADR for why `PUT` and
+single-record `GET` are blocked on the same open question: `GET
+TypeName` returns records with no id attached, ADR-006, so a handler has
+no way to identify "the one with id 5" among them without a lookup
+primitive this milestone deliberately doesn't add).
+
+Everything else in §1–§17 and the v0.2–v0.17 amendments above is
+unchanged.

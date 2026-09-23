@@ -1,7 +1,7 @@
 {
   "name": "nova-lang",
-  "version": "0.17.0",
-  "description": "Sharif NOVA - a unified, natural-reading programming language developed by Sharif Technologies. Core language, lists/records, typed procedures, DATA named types, persistence, a stdlib, ASK input, TRY/CATCH, a PAGE compiler (static/data-bound/interactive HTML), and SERVICE/API (a live, durable HTTP server serving PAGE routes too, with per-record BUTTON + CALL API, FORM/INPUT for real typed user input, and data that survives a restart).",
+  "version": "0.18.0",
+  "description": "Sharif NOVA - a unified, natural-reading programming language developed by Sharif Technologies. Core language, lists/records, typed procedures, DATA named types, persistence, a stdlib, ASK input, TRY/CATCH, a PAGE compiler (static/data-bound/interactive HTML), and SERVICE/API (a live, durable HTTP server with GET/POST/DELETE + path parameters, serving PAGE routes too, with per-record BUTTON + CALL API and FORM/INPUT for real typed user input).",
   "type": "module",
   "main": "./src/nova.js",
   "exports": {

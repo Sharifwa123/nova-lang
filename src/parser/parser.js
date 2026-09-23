@@ -616,25 +616,25 @@ export class Parser {
     return AST.ServiceDeclaration(apis, spanOf(serviceTok.span, end.span));
   }
 
-  // ADR-014/ADR-015 — api-declaration ::= "API" ("GET"|"POST") string-literal
-  //                                        NEWLINE statement* "END"
-  // Only GET and POST are supported so far - the grammar itself only
-  // accepts those literal keywords (see the ADRs for why this is a parser
-  // restriction, not a semantic one). The body is an ORDINARY statement
-  // block - unlike WHEN CLICKED (ADR-013), an API handler is deliberately
-  // NOT sandboxed.
+  // ADR-014/ADR-015/ADR-019 — api-declaration ::=
+  //     "API" ("GET"|"POST"|"DELETE") string-literal NEWLINE statement* "END"
+  // Only GET, POST, and DELETE are supported so far - the grammar itself
+  // only accepts those literal keywords (see the ADRs for why this is a
+  // parser restriction, not a semantic one; PUT is deliberately deferred,
+  // ADR-019). The body is an ORDINARY statement block - unlike WHEN
+  // CLICKED (ADR-013), an API handler is deliberately NOT sandboxed.
   parseApiDeclaration() {
     const apiTok = this.expectKeyword("API");
     let methodTok;
-    if (this.checkKeyword("GET") || this.checkKeyword("POST")) {
+    if (this.checkKeyword("GET") || this.checkKeyword("POST") || this.checkKeyword("DELETE")) {
       methodTok = this.advance();
     } else {
       this.error(
         CODES.UNEXPECTED_TOKEN,
-        `Expected GET or POST, but found ${this.describeToken(this.current())}.`,
+        `Expected GET, POST, or DELETE, but found ${this.describeToken(this.current())}.`,
         this.current(),
         null,
-        'API must be followed by GET or POST, e.g. API GET "/products" or API POST "/products".'
+        'API must be followed by GET, POST, or DELETE, e.g. API GET "/products" or API DELETE "/products/:id".'
       );
     }
     const routeTok = this.current();

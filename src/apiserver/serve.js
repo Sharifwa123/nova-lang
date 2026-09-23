@@ -7,6 +7,7 @@ import http from "node:http";
 import { NovaError } from "../diagnostics/diagnostic.js";
 import { CODES } from "../diagnostics/codes.js";
 import { collectPageRoutes } from "../pagecompiler/compile.js";
+import { parseRoutePattern, routeHasParams, matchRoutePattern } from "./routePattern.js";
 
 // ADR-015 — these two are, definitionally, "the client sent a body that
 // doesn't match what this endpoint declared it needs" - a client error,
@@ -24,6 +25,25 @@ export function collectApiRoutes(program) {
     if (stmt.kind !== "ServiceDeclaration") continue;
     for (const api of stmt.apis) {
       routes.set(`${api.method} ${api.route}`, api);
+    }
+  }
+  return routes;
+}
+
+// ADR-019 — every route containing a ":name" segment, pre-compiled to a
+// pattern (routePattern.js), kept separate from the flat exact-match map
+// above: a real request tries that map first (unchanged - every static
+// route keeps its exact behavior), and only falls back to walking this
+// list on a miss. The analyzer has already rejected any two routes whose
+// shapes could both match one request (E-SEM-055), so at most one entry
+// here can ever match a given (method, pathname).
+export function collectParameterizedApiRoutes(program) {
+  const routes = [];
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "ServiceDeclaration") continue;
+    for (const api of stmt.apis) {
+      if (!routeHasParams(api.route)) continue;
+      routes.push({ method: api.method, pattern: parseRoutePattern(api.route), api });
     }
   }
   return routes;
@@ -71,7 +91,21 @@ async function readJsonBody(req) {
   }
 }
 
-async function handleRequest(req, res, interpreter, routes, pageRoutes, persist) {
+// ADR-019 — tries the exact-match flat map first (unchanged for every
+// static route), then falls back to walking the parameterized routes for
+// the same method. Returns { api, pathParams } or null.
+function resolveApiMatch(routes, parameterizedRoutes, method, pathname) {
+  const exact = routes.get(`${method} ${pathname}`);
+  if (exact) return { api: exact, pathParams: {} };
+  for (const { method: routeMethod, pattern, api } of parameterizedRoutes) {
+    if (routeMethod !== method) continue;
+    const pathParams = matchRoutePattern(pattern, pathname);
+    if (pathParams) return { api, pathParams };
+  }
+  return null;
+}
+
+async function handleRequest(req, res, interpreter, routes, pageRoutes, persist, parameterizedRoutes = []) {
   const url = new URL(req.url, "http://localhost");
   // Declared routes are stored under their literal, already-decoded text
   // (e.g. `API GET "/café"` registers the key "GET /café"), but a real
@@ -86,8 +120,8 @@ async function handleRequest(req, res, interpreter, routes, pageRoutes, persist)
   } catch {
     pathname = url.pathname;
   }
-  const api = routes.get(`${req.method} ${pathname}`);
-  if (!api) {
+  const match = resolveApiMatch(routes, parameterizedRoutes, req.method, pathname);
+  if (!match) {
     // ADR-016 — a GET request that doesn't match a declared API falls
     // through to a compiled PAGE at the same route, if one exists (both
     // now live on the one server). The analyzer already rejects a PAGE
@@ -102,11 +136,12 @@ async function handleRequest(req, res, interpreter, routes, pageRoutes, persist)
     res.end(JSON.stringify({ error: `No API endpoint for ${req.method} ${pathname}` }));
     return;
   }
+  const { api, pathParams } = match;
   const requestBody = await readJsonBody(req);
   try {
     let result;
     try {
-      result = interpreter.invokeApiHandler(api.body, requestBody);
+      result = interpreter.invokeApiHandler(api.body, requestBody, pathParams);
     } finally {
       // ADR-018 — a handler reaching this point may have already run
       // SAVE/DELETE before erroring (e.g. a mismatched second REQUEST AS
@@ -141,9 +176,11 @@ async function handleRequest(req, res, interpreter, routes, pageRoutes, persist)
 // `persist`, if given (ADR-018 — `nova serve` only; every existing/
 // in-process caller omits it and stays purely in-memory, unchanged), is
 // called once after every request that reached a declared API handler.
-export function createRequestListener(interpreter, routes, pageRoutes = new Map(), persist = null) {
+// `parameterizedRoutes` (ADR-019) defaults to none - every existing/
+// in-process caller that omits it keeps its exact prior behavior.
+export function createRequestListener(interpreter, routes, pageRoutes = new Map(), persist = null, parameterizedRoutes = []) {
   return (req, res) => {
-    handleRequest(req, res, interpreter, routes, pageRoutes, persist).catch((e) => {
+    handleRequest(req, res, interpreter, routes, pageRoutes, persist, parameterizedRoutes).catch((e) => {
       // An actual interpreter bug reaching here, already past the
       // NovaError handling above - crash loudly rather than hide it
       // (Node's default for an uncaught exception in a request handler).
@@ -160,11 +197,12 @@ export function createRequestListener(interpreter, routes, pageRoutes = new Map(
 // gets logged, read back from the server itself once it's listening.
 export function startServer(interpreter, program, { port = 3000, log = console.log, persist = null } = {}) {
   const routes = collectApiRoutes(program);
+  const parameterizedRoutes = collectParameterizedApiRoutes(program); // ADR-019
   // ADR-016 — PAGE routes are compiled once here, against the same
   // already-populated store `nova build` uses (ADR-012's snapshot model
   // is unchanged: pages do not recompile per request).
   const pageRoutes = collectPageRoutes(program, interpreter.store);
-  const server = http.createServer(createRequestListener(interpreter, routes, pageRoutes, persist));
+  const server = http.createServer(createRequestListener(interpreter, routes, pageRoutes, persist, parameterizedRoutes));
   server.listen(port, () => {
     log(`NOVA service listening on http://localhost:${server.address().port}`);
   });

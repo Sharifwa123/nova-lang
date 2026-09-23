@@ -19,6 +19,11 @@
 # these two seed products from being re-added every restart - a durable
 # store means "seed only if empty" has to be the program's own job now,
 # same LENGTH/GET/IF NOVA already had.
+#
+# v0.18 (ADR-019): API DELETE + path parameters - a ":id" route segment is
+# always an integer (the only kind of id SAVE ever produces), bound as an
+# ordinary local inside the handler body:
+#   curl -X DELETE http://localhost:3000/products/1
 
 DATA Product
     name: text
@@ -45,6 +50,10 @@ SERVICE
         SET p = REQUEST AS Product
         SAVE p
         RETURN p
+    END
+
+    API DELETE "/products/:id"
+        DELETE Product id
     END
 
     API GET "/hello"
