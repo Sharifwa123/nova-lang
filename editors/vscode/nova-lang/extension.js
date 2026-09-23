@@ -6,6 +6,10 @@ const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const os = require("os");
+
+const MATERIAL_ICON_EXTENSION_ID = "PKief.material-icon-theme";
+const MATERIAL_ICON_THEME_ID = "material-icon-theme";
 
 let sharedTerminal = null;
 let statusBarItem = null;
@@ -142,20 +146,95 @@ function stopServe() {
   hideServingStatus();
 }
 
+// Material Icon Theme (PKief.material-icon-theme) has its own supported
+// customization point, `material-icon-theme.files.associations`, for
+// pointing a specific file pattern at a user-supplied SVG - this is the
+// one real way to get the NOVA mark showing up *inside* Material Icon
+// Theme instead of replacing it outright, since no VS Code extension can
+// reach into another extension's own icon theme definition directly.
+// Per Material Icon Theme's own docs, the custom SVG has to live under
+// <home>/.vscode/extensions/icons/ (sibling to every installed
+// extension's own folder, not inside this extension), and the
+// association's path is relative to *its* install folder, hence the
+// fixed "../../icons/<name>" - two levels up from
+// <home>/.vscode/extensions/<material-icon-theme's folder>/dist/.
+function materialIconsDir() {
+  return path.join(os.homedir(), ".vscode", "extensions", "icons");
+}
+
+async function setupMaterialIconTheme(context) {
+  const materialExtension = vscode.extensions.getExtension(MATERIAL_ICON_EXTENSION_ID);
+  if (!materialExtension) {
+    const choice = await vscode.window.showWarningMessage(
+      "NOVA: Material Icon Theme isn't installed - install it first, then run this command again.",
+      "Open Material Icon Theme"
+    );
+    if (choice === "Open Material Icon Theme") {
+      vscode.env.openExternal(vscode.Uri.parse(`vscode:extension/${MATERIAL_ICON_EXTENSION_ID}`));
+    }
+    return false;
+  }
+
+  const destDir = materialIconsDir();
+  const sourceSvg = path.join(context.extensionPath, "icons", "nova-file.svg");
+  const destSvg = path.join(destDir, "nova.svg");
+
+  try {
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.copyFileSync(sourceSvg, destSvg);
+  } catch (e) {
+    vscode.window.showErrorMessage(`NOVA: couldn't write ${destSvg}: ${e.message}`);
+    return false;
+  }
+
+  const config = vscode.workspace.getConfiguration();
+  const existing = config.get("material-icon-theme.files.associations") || {};
+  await config.update(
+    "material-icon-theme.files.associations",
+    Object.assign({}, existing, { "*.nova": "../../icons/nova" }),
+    vscode.ConfigurationTarget.Global
+  );
+
+  const reload = await vscode.window.showInformationMessage(
+    "NOVA: added the NOVA icon to Material Icon Theme's file associations for .nova files. Reload the window to see it.",
+    "Reload Window"
+  );
+  if (reload === "Reload Window") {
+    vscode.commands.executeCommand("workbench.action.reloadWindow");
+  }
+  return true;
+}
+
 // Explorer file icons come from whichever single "File Icon Theme" is
 // active - a separate VS Code extension point from language/grammar
 // registration, with no API for adding an icon into someone else's
-// already-active theme. The extension ships its own (contributes
-// .iconThemes, package.json) so .nova files get the NOVA mark instead of
-// a generic file icon, but switching the user's global icon theme is
-// their call, not something to do silently - offer it once, remember
-// their answer either way, and use the ordinary `workbench.iconTheme`
-// setting (no private API).
+// already-active theme (Material Icon Theme's files.associations,
+// above, is the one documented exception - it's that extension's own
+// feature, not a general mechanism). The extension ships its own theme
+// (contributes.iconThemes, package.json) so .nova files get the NOVA
+// mark instead of a generic file icon, but switching the user's global
+// icon theme - or rewriting another extension's settings - is their
+// call, not something to do silently: offer it once, remember their
+// answer either way, and stick to ordinary settings updates (no private
+// API, no touching files outside what's documented above).
 async function offerNovaIconTheme(context) {
   if (context.globalState.get("novaIconThemePrompted")) return;
 
   const current = vscode.workspace.getConfiguration("workbench").get("iconTheme");
   if (current === "nova-icons") {
+    await context.globalState.update("novaIconThemePrompted", true);
+    return;
+  }
+
+  if (current === MATERIAL_ICON_THEME_ID && vscode.extensions.getExtension(MATERIAL_ICON_EXTENSION_ID)) {
+    const choice = await vscode.window.showInformationMessage(
+      "NOVA: add the NOVA icon to Material Icon Theme for .nova files? Everything else keeps using Material Icon Theme as-is.",
+      "Add NOVA Icon",
+      "Not now"
+    );
+    if (choice === "Add NOVA Icon") {
+      await setupMaterialIconTheme(context);
+    }
     await context.globalState.update("novaIconThemePrompted", true);
     return;
   }
@@ -182,6 +261,7 @@ function activate(context) {
     vscode.commands.registerCommand("nova.build", () => runSimple("build")),
     vscode.commands.registerCommand("nova.serve", () => runServe()),
     vscode.commands.registerCommand("nova.stopServe", () => stopServe()),
+    vscode.commands.registerCommand("nova.addIconToMaterialTheme", () => setupMaterialIconTheme(context)),
     vscode.window.onDidCloseTerminal((closed) => {
       if (closed === sharedTerminal) {
         sharedTerminal = null;

@@ -34,7 +34,7 @@ ways to actually install it:
    cd editors/vscode/nova-lang
    npx --yes @vscode/vsce package
    ```
-   This writes `sharif-tech-nova-lang-0.2.0.vsix` in that folder.
+   This writes `sharif-tech-nova-lang-0.3.0.vsix` in that folder.
 2. In VS Code, open the **Extensions** view (`Ctrl+Shift+X` /
    `Cmd+Shift+X`), click the `...` (More Actions) menu at the top of that
    panel, choose **Install from VSIX...**, and pick the `.vsix` file you
@@ -44,17 +44,17 @@ ways to actually install it:
 
 Equivalently, from the command line:
 ```bash
-code --install-extension editors/vscode/nova-lang/sharif-tech-nova-lang-0.2.0.vsix
+code --install-extension editors/vscode/nova-lang/sharif-tech-nova-lang-0.3.0.vsix
 ```
 
 ### Option B — Copy into your extensions folder (no build step at all)
 
 ```bash
 # macOS/Linux
-cp -r editors/vscode/nova-lang ~/.vscode/extensions/sharif-tech-nova-lang-0.2.0
+cp -r editors/vscode/nova-lang ~/.vscode/extensions/sharif-tech-nova-lang-0.3.0
 
 # Windows (PowerShell)
-Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\sharif-tech-nova-lang-0.2.0"
+Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\sharif-tech-nova-lang-0.3.0"
 ```
 Then run **Developer: Reload Window** from the Command Palette (or
 restart VS Code). This won't show up in the Extensions list as an
@@ -79,13 +79,29 @@ independent VS Code setting, not something the extension locks in.
 
 Note that activating **NOVA Icons** replaces whatever icon theme was
 active before for *all* files, not just `.nova` ones — VS Code only
-supports one active file icon theme at a time. NOVA Icons includes plain,
-neutral icons for ordinary files and folders so the rest of your workspace
-still looks reasonable; if you'd rather keep a full icon pack (e.g.
-Material Icon Theme) for everything else and only want the NOVA mark on
-`.nova` files specifically, that combination isn't something any VS Code
-extension can currently do — check whichever icon theme you use for its
-own NOVA/`.nova` support instead.
+supports one active file icon theme at a time, and no extension (this one
+included) can reach into another extension's already-active icon theme to
+add a single icon to it. NOVA Icons includes plain, neutral icons for
+ordinary files and folders so the rest of your workspace still looks
+reasonable if you do switch to it.
+
+### Using Material Icon Theme instead
+
+If you use **Material Icon Theme** and want to keep it for everything else,
+that extension has its own supported way to point one file pattern at a
+custom icon (`material-icon-theme.files.associations`) — this extension
+uses exactly that, rather than replacing your icon theme. If you have
+Material Icon Theme installed and active, opening a `.nova` file offers
+this automatically; you can also run it anytime from the Command Palette:
+
+> **NOVA: Add NOVA Icon to Material Icon Theme**
+
+This copies the NOVA icon to
+`~/.vscode/extensions/icons/nova.svg` (the location Material Icon Theme's
+own custom-association feature requires) and adds a
+`"*.nova": "../../icons/nova"` entry to your **user** settings'
+`material-icon-theme.files.associations` — nothing else about Material
+Icon Theme's configuration is touched, and a reload picks it up.
 
 ## Settings
 

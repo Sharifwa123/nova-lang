@@ -2,7 +2,7 @@
   "name": "sharif-tech-nova-lang",
   "displayName": "NOVA Language by Sharif Technologies",
   "description": "Syntax highlighting, and Run/Build/Serve commands, for the NOVA programming language.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "sharif-tech",
   "private": true,
   "icon": "images/icon.png",
@@ -48,7 +48,8 @@
       { "command": "nova.run", "title": "NOVA: Run File", "icon": "$(play)" },
       { "command": "nova.build", "title": "NOVA: Build (compile PAGE to HTML)", "icon": "$(package)" },
       { "command": "nova.serve", "title": "NOVA: Serve (start live HTTP server)", "icon": "$(server-environment)" },
-      { "command": "nova.stopServe", "title": "NOVA: Stop Server", "icon": "$(debug-stop)" }
+      { "command": "nova.stopServe", "title": "NOVA: Stop Server", "icon": "$(debug-stop)" },
+      { "command": "nova.addIconToMaterialTheme", "title": "NOVA: Add NOVA Icon to Material Icon Theme" }
     ],
     "menus": {
       "editor/title": [
