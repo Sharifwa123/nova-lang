@@ -2,7 +2,7 @@
   "name": "sharif-tech-nova-lang",
   "displayName": "NOVA Language by Sharif Technologies",
   "description": "Syntax highlighting, and Run/Build/Serve commands, for the NOVA programming language.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "sharif-tech",
   "private": true,
   "icon": "images/icon.png",
@@ -35,6 +35,13 @@
         "language": "nova",
         "scopeName": "source.nova",
         "path": "./syntaxes/nova.tmLanguage.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "nova-icons",
+        "label": "NOVA Icons",
+        "path": "./icons/nova-icon-theme.json"
       }
     ],
     "commands": [

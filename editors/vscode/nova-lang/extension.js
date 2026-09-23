@@ -142,6 +142,37 @@ function stopServe() {
   hideServingStatus();
 }
 
+// Explorer file icons come from whichever single "File Icon Theme" is
+// active - a separate VS Code extension point from language/grammar
+// registration, with no API for adding an icon into someone else's
+// already-active theme. The extension ships its own (contributes
+// .iconThemes, package.json) so .nova files get the NOVA mark instead of
+// a generic file icon, but switching the user's global icon theme is
+// their call, not something to do silently - offer it once, remember
+// their answer either way, and use the ordinary `workbench.iconTheme`
+// setting (no private API).
+async function offerNovaIconTheme(context) {
+  if (context.globalState.get("novaIconThemePrompted")) return;
+
+  const current = vscode.workspace.getConfiguration("workbench").get("iconTheme");
+  if (current === "nova-icons") {
+    await context.globalState.update("novaIconThemePrompted", true);
+    return;
+  }
+
+  const choice = await vscode.window.showInformationMessage(
+    "NOVA: use the NOVA icon theme so .nova files show the NOVA icon in the Explorer?",
+    "Enable",
+    "Not now"
+  );
+  if (choice === "Enable") {
+    await vscode.workspace
+      .getConfiguration()
+      .update("workbench.iconTheme", "nova-icons", vscode.ConfigurationTarget.Global);
+  }
+  await context.globalState.update("novaIconThemePrompted", true);
+}
+
 function activate(context) {
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   context.subscriptions.push(statusBarItem);
@@ -158,6 +189,8 @@ function activate(context) {
       }
     })
   );
+
+  offerNovaIconTheme(context);
 }
 
 function deactivate() {
