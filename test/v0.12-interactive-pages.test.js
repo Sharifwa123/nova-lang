@@ -306,23 +306,21 @@ test("v0.12: SET's initial value must be a literal", () => {
   );
 });
 
-test("v0.12: BUTTON inside FOR EACH is not supported yet (E-SEM-038)", () => {
-  assertThrows(
-    () =>
-      compile(`DATA Product
+test("v0.12: BUTTON inside FOR EACH is allowed (ADR-016) when it only touches page-local state", () => {
+  const program = compile(`DATA Product
     name: text
 END
 PAGE "/"
+    SET clicks = 0
     FOR EACH p IN GET Product
         BUTTON p.name
             WHEN CLICKED
-                CHANGE x = 1
+                CHANGE clicks = clicks + 1
             END
         END
     END
-END`),
-    (e) => assertEqual(e.diagnostic.code, CODES.BUTTON_INSIDE_LOOP_NOT_SUPPORTED)
-  );
+END`);
+  assertEqual(program.kind, "Program");
 });
 
 test("v0.12: SET inside FOR EACH is rejected (state is PAGE-scoped, not per-record)", () => {

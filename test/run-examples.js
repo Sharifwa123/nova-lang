@@ -272,6 +272,92 @@ console.log("\n== SERVICE/API (nova serve, expect exit 0 + real HTTP responses) 
   }
 }
 
+// ADR-016 — PAGE/SERVICE integration: spawn the real `nova serve` (so the
+// PAGE route is genuinely being served by the same process as the API,
+// not just compiled in isolation), then run its generated <script> in a
+// DOM-stub vm sandbox (same technique as interactive_counter.nova above)
+// - except its `fetch` is a thin shim resolving CALL API's relative path
+// against the real spawned server before delegating to Node's real global
+// fetch. Calling the generated (now-async) novaClick_N() therefore issues
+// a genuinely real HTTP POST against the genuinely live server; a
+// separate real GET afterward confirms the reservation actually landed -
+// not an in-process assertion at any point.
+console.log("\n== PAGE + SERVICE integration (nova serve, expect a real click to really book a room) ==");
+{
+  const source = path.join(examplesDir, "booking_page.nova");
+  let ok = false;
+  let failureDetail = "";
+  const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    let stdoutBuf = "";
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timed out waiting for the server to report it's listening.")), 5000);
+      child.stdout.on("data", (chunk) => {
+        stdoutBuf += chunk.toString();
+        const m = stdoutBuf.match(/listening on http:\/\/localhost:(\d+)/);
+        if (m) {
+          clearTimeout(timer);
+          resolve(Number(m[1]));
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error(`Server process exited early (code ${code}).`));
+      });
+    });
+
+    const before = await (await fetch(`http://localhost:${port}/reservations`)).json();
+
+    const pageHtml = await (await fetch(`http://localhost:${port}/`)).text();
+    const scriptSrc = pageHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
+    const elements = new Map();
+    for (const m of pageHtml.matchAll(/id="(novaBtn_\d+)"/g)) {
+      if (!elements.has(m[1])) {
+        elements.set(m[1], {
+          disabled: false,
+          _text: "",
+          set textContent(v) { this._text = v; },
+          get textContent() { return this._text; },
+        });
+      }
+    }
+    const sandbox = {
+      document: { getElementById: (id) => elements.get(id) },
+      fetch: (url, opts) => fetch(`http://localhost:${port}${url}`, opts),
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(scriptSrc, sandbox);
+
+    const btn = elements.get("novaBtn_1"); // the Double room (roomNumber 201)
+    await sandbox.novaClick_1();
+
+    const after = await (await fetch(`http://localhost:${port}/reservations`)).json();
+
+    ok =
+      before.length === 0 &&
+      btn.textContent === "Done" &&
+      btn.disabled === true &&
+      after.length === 1 &&
+      after[0].roomNumber === 201;
+    if (!ok) {
+      failureDetail = `before=${JSON.stringify(before)} btn=${JSON.stringify({ text: btn.textContent, disabled: btn.disabled })} after=${JSON.stringify(after)}`;
+    }
+  } catch (e) {
+    failureDetail = String(e.stack ?? e);
+  } finally {
+    child.kill();
+  }
+
+  if (ok) {
+    console.log(`  OK   booking_page.nova serve -> a real click really booked a room`);
+    passed++;
+  } else {
+    console.log(`  FAIL booking_page.nova serve`);
+    console.log(indent(failureDetail));
+    failed++;
+  }
+}
+
 function indent(s) {
   return (s ?? "").split("\n").map((l) => "    " + l).join("\n");
 }

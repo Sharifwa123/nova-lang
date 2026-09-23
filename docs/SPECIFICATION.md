@@ -1,4 +1,10 @@
-# NOVA v0.1 — Core Language Specification
+# Sharif NOVA v0.1 — Core Language Specification
+
+This specification covers Sharif NOVA, an independent programming language
+and toolchain developed by Sharif Technologies, unrelated to other
+same-named "Nova"/"NovaLang" language projects, editors, or products
+elsewhere in the industry. It is referred to as NOVA throughout this
+document.
 
 Status: Implemented (this repository)
 Scope: Language core only — the lexer, parser, AST, semantic analyzer, and
@@ -1191,3 +1197,91 @@ New diagnostics:
 Everything else in §1–§17 and the v0.2–v0.13 amendments above is
 unchanged — `API GET` and `PAGE`/`nova build` in particular are completely
 untouched by this milestone.
+
+---
+
+## v0.15 Amendments — PAGE/SERVICE Integration: BUTTON in a Loop, CALL API, and Serving Pages Live (ADR-016)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-016-page-service-integration.md](adr/ADR-016-page-service-integration.md)
+for full rationale.
+
+**§2.6 (amended)** — two new keywords: `CALL`, `WITH` (neither was
+previously forward-reserved).
+
+**New grammar**:
+```
+statement            ::= ... (unchanged) | call-api-statement
+call-api-statement    ::= "CALL" "API" ("GET"|"POST") string-literal
+                           ( "WITH" record-literal )?
+```
+`call-api-statement` parses generically (any statement position), the
+same "parse generically, restrict semantically" precedent ADR-013 already
+set for `WHEN CLICKED`'s own body.
+
+DECISION: `nova serve` now compiles every `PAGE` declaration once at
+startup — the same timing and store snapshot `nova build` already uses
+(ADR-012's build-time-snapshot model is unchanged; a page does not
+recompile per request) — and serves the result for `GET` requests that
+don't match a declared `API`. `nova build`'s file-writing behavior is
+completely unchanged; this only adds a second, in-memory way to reach the
+same compiled HTML from the live server. Because a `PAGE` route and an
+`API GET` route can now collide on one server, that's a new compile-time
+error (`E-SEM-048`) rather than a silent routing ambiguity.
+
+DECISION: `BUTTON` is now allowed inside `FOR EACH` — the v0.12 amendment
+above (`E-SEM-038`, "not supported yet") is retired (the code stays
+defined, per this codebase's convention of never reusing a diagnostic
+code for a different meaning). A per-record button's label and click
+handler data are both resolved against the concrete bound record at PAGE
+**compile time**, the exact same mechanism a data-bound `HEADING`/`TEXT`
+already uses (ADR-012) — no new runtime "which record" tracking exists,
+or is needed.
+
+DECISION: `CALL API` is valid **only** inside a `BUTTON`'s `WHEN CLICKED`
+block; found anywhere else (top level, a `DO` body, an `API` handler
+body), it's rejected (`E-SEM-045`) the moment ordinary statement checking
+reaches it — a legitimate one is only ever visited through the
+button-action path, never through ordinary statement dispatch. Its
+method+route must match a real `API` declared somewhere in the same file,
+checked against the exact routing map `registerService` (ADR-014) already
+builds — an unmatched method+route is `E-SEM-046`. A `WITH` payload's
+fields follow the same restricted shape any page-element value already
+has (ADR-012/013): a plain literal, page-local state, or a field access
+rooted at an enclosing `FOR EACH`'s loop variable, checked against the
+real `DATA` shape — anything else is `E-SEM-047`.
+
+DECISION, explicitly deferred: a `CALL API` payload's *shape* is not
+statically cross-checked against the target handler's own
+`REQUEST AS <DataType>` field list — that's real, separate work (tracing
+which `DATA` type an arbitrary declared route's handler binds). A mismatch
+is instead caught the same way it already is for any other client: at
+runtime, by the existing `E-RUN-008`/`E-RUN-009` checks (ADR-015),
+surfacing to the page as an ordinary failed request.
+
+DECISION: a button whose actions include a `CALL API` compiles to an
+`async` click-handler function; a button with only `CHANGE` actions is
+completely unaffected (byte-for-byte the same synchronous function
+ADR-013 already produced). The button element gains a stable `id` so its
+own generated function can reach back into the DOM: on click it disables
+itself, `await fetch()`s the declared route, and on a non-OK response
+throws, caught by the same handler. On success the button's own label
+becomes a fixed `"Done"`; on failure, a fixed `"Failed - try again"`, and
+it re-enables. No syntax yet exists for a developer-chosen success/failure
+label (DEFERRED, the same "smallest correct version first" ADR-013 itself
+shipped with).
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-045 | CALL API used outside a BUTTON's WHEN CLICKED body |
+| E-SEM-046 | CALL API references a method+route no API in this file declares |
+| E-SEM-047 | A CALL API WITH payload field isn't a literal, page-local state, or a valid loop-variable field reference |
+| E-SEM-048 | A PAGE route collides with an API GET route (nova serve now serves both from one server) |
+
+`E-SEM-038` (`BUTTON_INSIDE_LOOP_NOT_SUPPORTED`) is retired, not reused.
+
+Everything else in §1–§17 and the v0.2–v0.14 amendments above is
+unchanged — a `PAGE` with no `BUTTON`-in-loop and no `CALL API`, and
+`nova build` itself, keep their exact current behavior.

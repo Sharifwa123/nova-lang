@@ -1,0 +1,17 @@
+{
+  "iconDefinitions": {
+    "_file": { "iconPath": "./generic-file.svg" },
+    "_folder": { "iconPath": "./generic-folder.svg" },
+    "_folder_open": { "iconPath": "./generic-folder-open.svg" },
+    "_nova_file": { "iconPath": "./nova-file.svg" }
+  },
+  "file": "_file",
+  "folder": "_folder",
+  "folderExpanded": "_folder_open",
+  "fileExtensions": {
+    "nova": "_nova_file"
+  },
+  "languageIds": {
+    "nova": "_nova_file"
+  }
+}
