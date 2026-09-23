@@ -8,7 +8,7 @@
     ".": "./src/nova.js"
   },
   "bin": {
-    "nova": "./src/cli.js"
+    "nova": "src/cli.js"
   },
   "files": [
     "src/",
