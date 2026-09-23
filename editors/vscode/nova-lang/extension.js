@@ -5,8 +5,11 @@
 const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");
+const http = require("http");
 
 let sharedTerminal = null;
+let statusBarItem = null;
+let serving = false;
 
 function getTerminal() {
   if (sharedTerminal && vscode.window.terminals.includes(sharedTerminal)) {
@@ -46,16 +49,19 @@ function quote(p) {
   return `"${p}"`;
 }
 
-async function runNovaCommand(command, { needsPort = false } = {}) {
+// Shared preflight for all three commands: an active, saved .nova file
+// and a resolved src/cli.js. Returns { filePath, cliPath } or null (after
+// showing the user why).
+async function prepareRun() {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     vscode.window.showWarningMessage("NOVA: open a .nova file first.");
-    return;
+    return null;
   }
   const document = editor.document;
   if (document.languageId !== "nova") {
     vscode.window.showWarningMessage("NOVA: the active file isn't a .nova file.");
-    return;
+    return null;
   }
   if (document.isDirty) {
     await document.save();
@@ -67,28 +73,95 @@ async function runNovaCommand(command, { needsPort = false } = {}) {
     vscode.window.showErrorMessage(
       "NOVA: couldn't find src/cli.js. Set the \"nova.cliPath\" setting to your NOVA checkout's src/cli.js."
     );
-    return;
+    return null;
   }
+  return { filePath, cliPath };
+}
 
-  let commandLine = `node ${quote(cliPath)} ${command} ${quote(filePath)}`;
-  if (needsPort) {
-    const port = vscode.workspace.getConfiguration("nova").get("defaultServePort") || 3000;
-    commandLine += ` ${port}`;
-  }
+async function runSimple(command) {
+  const prepared = await prepareRun();
+  if (!prepared) return;
+  const terminal = getTerminal();
+  terminal.show();
+  terminal.sendText(`node ${quote(prepared.cliPath)} ${command} ${quote(prepared.filePath)}`);
+}
+
+// Polls the port with a real HTTP request rather than guessing a fixed
+// delay or parsing terminal output (VS Code's Terminal API doesn't expose
+// written text without Shell Integration, which isn't guaranteed
+// available) - `onReady` only fires once `nova serve` is actually
+// answering requests.
+function waitForServerReady(port, attemptsLeft, onReady) {
+  const req = http.get({ host: "127.0.0.1", port, path: "/", timeout: 800 }, (res) => {
+    res.resume(); // drain, we only care that something answered
+    onReady();
+  });
+  req.on("error", () => {
+    if (attemptsLeft <= 0) return; // give up quietly; the terminal output still shows what happened
+    setTimeout(() => waitForServerReady(port, attemptsLeft - 1, onReady), 300);
+  });
+  req.on("timeout", () => req.destroy());
+}
+
+function showServingStatus(port) {
+  serving = true;
+  statusBarItem.text = `$(broadcast) NOVA :${port}`;
+  statusBarItem.tooltip = "NOVA server is live - click to stop";
+  statusBarItem.command = "nova.stopServe";
+  statusBarItem.show();
+}
+
+function hideServingStatus() {
+  serving = false;
+  statusBarItem.hide();
+}
+
+async function runServe() {
+  const prepared = await prepareRun();
+  if (!prepared) return;
+
+  const config = vscode.workspace.getConfiguration("nova");
+  const port = config.get("defaultServePort") || 3000;
 
   const terminal = getTerminal();
   terminal.show();
-  terminal.sendText(commandLine);
+  terminal.sendText(`node ${quote(prepared.cliPath)} serve ${quote(prepared.filePath)} ${port}`);
+
+  waitForServerReady(port, 20, () => {
+    showServingStatus(port);
+    if (config.get("openBrowserOnServe")) {
+      vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${port}/`));
+    }
+  });
+}
+
+function stopServe() {
+  if (sharedTerminal) {
+    sharedTerminal.sendText("\u0003", false); // Ctrl+C, no trailing Enter
+  }
+  hideServingStatus();
 }
 
 function activate(context) {
+  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  context.subscriptions.push(statusBarItem);
+
   context.subscriptions.push(
-    vscode.commands.registerCommand("nova.run", () => runNovaCommand("run")),
-    vscode.commands.registerCommand("nova.build", () => runNovaCommand("build")),
-    vscode.commands.registerCommand("nova.serve", () => runNovaCommand("serve", { needsPort: true }))
+    vscode.commands.registerCommand("nova.run", () => runSimple("run")),
+    vscode.commands.registerCommand("nova.build", () => runSimple("build")),
+    vscode.commands.registerCommand("nova.serve", () => runServe()),
+    vscode.commands.registerCommand("nova.stopServe", () => stopServe()),
+    vscode.window.onDidCloseTerminal((closed) => {
+      if (closed === sharedTerminal) {
+        sharedTerminal = null;
+        hideServingStatus();
+      }
+    })
   );
 }
 
-function deactivate() {}
+function deactivate() {
+  if (serving) stopServe();
+}
 
 module.exports = { activate, deactivate };

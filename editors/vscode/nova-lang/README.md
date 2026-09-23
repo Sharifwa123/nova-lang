@@ -8,12 +8,16 @@ same experience most language extensions give you, not just a terminal.
   → `nova run <file>`
 - **Build** (editor toolbar / right-click) → `nova build <file>` (compiles
   any `PAGE` declarations to `dist/*.html`)
-- **Serve** (editor toolbar / right-click) → `nova serve <file> [port]`
-  (starts the live HTTP server for any `SERVICE`/`API` declarations)
+- **Serve** (editor toolbar / right-click) → `nova serve <file> <port>` —
+  genuinely *live* serving: the extension polls the port with a real HTTP
+  request (not a guessed delay), and once `SERVICE`/`API` is actually
+  answering requests it opens your default browser to it automatically
+  and shows a status bar item (`📡 NOVA :3000`) — **click the status bar
+  item, or run "NOVA: Stop Server", to stop it.**
 
-All three open (or reuse) an integrated terminal named **NOVA** and run
-the real CLI there — full color output, real stdin for `ASK`, `Ctrl+C` to
-stop a running `nova serve`, exactly like running it by hand.
+All commands open (or reuse) an integrated terminal named **NOVA** and run
+the real CLI there — full color output and real stdin for `ASK` behave
+exactly like running it by hand.
 
 ## Install (no build step, zero dependencies)
 
@@ -52,6 +56,7 @@ added to this repository's own dependencies.)
 |---|---|---|
 | `nova.cliPath` | *(auto-detect)* | Absolute path to `src/cli.js`. Only needed if your `.nova` file isn't inside a NOVA checkout the extension can walk up to. |
 | `nova.defaultServePort` | `3000` | Port used by **NOVA: Serve**. |
+| `nova.openBrowserOnServe` | `true` | Auto-open the browser once the server is confirmed live. Set to `false` if you'd rather just watch the status bar / terminal. |
 
 ## What's highlighted
 
