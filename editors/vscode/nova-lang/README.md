@@ -36,7 +36,7 @@ ways to actually install it:
    cd editors/vscode/nova-lang
    npx --yes @vscode/vsce package
    ```
-   This writes `sharif-tech-nova-lang-0.3.0.vsix` in that folder.
+   This writes `sharif-tech-nova-lang-0.4.0.vsix` in that folder.
 2. In VS Code, open the **Extensions** view (`Ctrl+Shift+X` /
    `Cmd+Shift+X`), click the `...` (More Actions) menu at the top of that
    panel, choose **Install from VSIX...**, and pick the `.vsix` file you
@@ -46,17 +46,17 @@ ways to actually install it:
 
 Equivalently, from the command line:
 ```bash
-code --install-extension editors/vscode/nova-lang/sharif-tech-nova-lang-0.3.0.vsix
+code --install-extension editors/vscode/nova-lang/sharif-tech-nova-lang-0.4.0.vsix
 ```
 
 ### Option B — Copy into your extensions folder (no build step at all)
 
 ```bash
 # macOS/Linux
-cp -r editors/vscode/nova-lang ~/.vscode/extensions/sharif-tech-nova-lang-0.3.0
+cp -r editors/vscode/nova-lang ~/.vscode/extensions/sharif-tech-nova-lang-0.4.0
 
 # Windows (PowerShell)
-Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\sharif-tech-nova-lang-0.3.0"
+Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\sharif-tech-nova-lang-0.4.0"
 ```
 Then run **Developer: Reload Window** from the Command Palette (or
 restart VS Code). This won't show up in the Extensions list as an
@@ -109,7 +109,7 @@ Icon Theme's configuration is touched, and a reload picks it up.
 
 | Setting | Default | Description |
 |---|---|---|
-| `nova.cliPath` | *(auto-detect)* | Absolute path to `src/cli.js`. Only needed if your `.nova` file isn't inside a NOVA checkout the extension can walk up to. |
+| `nova.cliPath` | *(auto-detect)* | Absolute path to `src/cli.js`. Only needed to override auto-detection — the extension first looks for a NOVA checkout above the current file, then falls back to the globally-installed `nova` command (`npm install -g nova-lang`). |
 | `nova.defaultServePort` | `3000` | Port used by **NOVA: Serve**. |
 | `nova.openBrowserOnServe` | `true` | Auto-open the browser once the server is confirmed live. Set to `false` if you'd rather just watch the status bar / terminal. |
 

@@ -39,12 +39,25 @@ function findCliPath(startDir) {
   }
 }
 
-function resolveCliPath(fileDir) {
+// Resolves how to actually invoke NOVA, in order: an explicit
+// "nova.cliPath" setting, a local checkout found by walking up from the
+// file (for working inside this repository), and finally - the common
+// case for anyone who just ran `npm install -g nova-lang` - the plain
+// `nova` command already on PATH. Only the first two need `node` in
+// front; the fallback is a real installed binary. This never returns
+// null: a missing global install surfaces as the terminal's own normal
+// "command not found", which is a clearer signal than a custom error
+// here could be.
+function resolveCliCommand(fileDir) {
   const configured = vscode.workspace.getConfiguration("nova").get("cliPath");
   if (configured && configured.trim().length > 0) {
-    return configured.trim();
+    return `node ${quote(configured.trim())}`;
   }
-  return findCliPath(fileDir);
+  const found = findCliPath(fileDir);
+  if (found) {
+    return `node ${quote(found)}`;
+  }
+  return "nova";
 }
 
 // Quotes a path for a shell command line - handles spaces on both
@@ -54,8 +67,8 @@ function quote(p) {
 }
 
 // Shared preflight for all three commands: an active, saved .nova file
-// and a resolved src/cli.js. Returns { filePath, cliPath } or null (after
-// showing the user why).
+// and a resolved command to invoke NOVA with. Returns
+// { filePath, cliCommand } or null (after showing the user why).
 async function prepareRun() {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
@@ -72,14 +85,8 @@ async function prepareRun() {
   }
 
   const filePath = document.uri.fsPath;
-  const cliPath = resolveCliPath(path.dirname(filePath));
-  if (!cliPath) {
-    vscode.window.showErrorMessage(
-      "NOVA: couldn't find src/cli.js. Set the \"nova.cliPath\" setting to your NOVA checkout's src/cli.js."
-    );
-    return null;
-  }
-  return { filePath, cliPath };
+  const cliCommand = resolveCliCommand(path.dirname(filePath));
+  return { filePath, cliCommand };
 }
 
 async function runSimple(command) {
@@ -87,7 +94,7 @@ async function runSimple(command) {
   if (!prepared) return;
   const terminal = getTerminal();
   terminal.show();
-  terminal.sendText(`node ${quote(prepared.cliPath)} ${command} ${quote(prepared.filePath)}`);
+  terminal.sendText(`${prepared.cliCommand} ${command} ${quote(prepared.filePath)}`);
 }
 
 // Polls the port with a real HTTP request rather than guessing a fixed
@@ -129,7 +136,7 @@ async function runServe() {
 
   const terminal = getTerminal();
   terminal.show();
-  terminal.sendText(`node ${quote(prepared.cliPath)} serve ${quote(prepared.filePath)} ${port}`);
+  terminal.sendText(`${prepared.cliCommand} serve ${quote(prepared.filePath)} ${port}`);
 
   waitForServerReady(port, 20, () => {
     showServingStatus(port);

@@ -2,7 +2,7 @@
   "name": "sharif-tech-nova-lang",
   "displayName": "NOVA Language by Sharif Technologies",
   "description": "Syntax highlighting, and Run/Build/Serve commands, for Sharif NOVA - the programming language developed by Sharif Technologies.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "sharif-tech",
   "private": true,
   "icon": "images/icon.png",
@@ -84,7 +84,7 @@
         "nova.cliPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to NOVA's `src/cli.js`. Leave empty to auto-detect by walking up from the current file for a folder containing `src/cli.js`."
+          "markdownDescription": "Absolute path to NOVA's `src/cli.js`. Leave empty to auto-detect: first by walking up from the current file for a folder containing `src/cli.js` (a NOVA checkout), then by falling back to the globally-installed `nova` command (`npm install -g nova-lang`)."
         },
         "nova.defaultServePort": {
           "type": "number",
