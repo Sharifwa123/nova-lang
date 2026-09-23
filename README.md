@@ -88,7 +88,16 @@ docs/
   adr/               architectural decision records
 examples/        runnable .nova programs (and examples/errors/ for diagnostics)
 test/            zero-dependency unit tests + a real-CLI example runner
+editors/vscode/  VS Code extension (syntax highlighting + Run/Build/Serve)
 ```
+
+## Editor support
+
+`editors/vscode/nova-lang/` is a VS Code extension: syntax highlighting for
+`.nova` files, plus Run/Build/Serve wired into the editor's toolbar,
+right-click menu, and Command Palette — not just a terminal command. See
+[editors/vscode/nova-lang/README.md](editors/vscode/nova-lang/README.md)
+for install instructions (no build step, zero dependencies).
 
 ## License
 

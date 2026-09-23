@@ -88,6 +88,11 @@ that's a reasonable improvement — the module boundaries (`lexer/`,
 `parser/`, `ast/`, `analyzer/`, `interpreter/`, `diagnostics/`) were kept
 small and dependency-light specifically to make that migration mechanical.
 
+`editors/vscode/nova-lang/` is a small VS Code extension (syntax
+highlighting + Run/Build/Serve commands) — pure tooling, not a language
+change, so it doesn't get an ADR or a version bump. See its own README
+for install instructions.
+
 ## Current state (this repo)
 
 - **v0.1 core, fully implemented and passing**: lexer, recursive-descent

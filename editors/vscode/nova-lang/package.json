@@ -1,0 +1,80 @@
+{
+  "name": "nova-lang",
+  "displayName": "NOVA Language",
+  "description": "Syntax highlighting, and Run/Build/Serve commands, for the NOVA programming language.",
+  "version": "0.1.0",
+  "publisher": "nova-lang",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "keywords": ["nova", "nova-lang"],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:nova"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nova",
+        "aliases": ["NOVA", "nova"],
+        "extensions": [".nova"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nova",
+        "scopeName": "source.nova",
+        "path": "./syntaxes/nova.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      { "command": "nova.run", "title": "NOVA: Run File", "icon": "$(play)" },
+      { "command": "nova.build", "title": "NOVA: Build (compile PAGE to HTML)", "icon": "$(package)" },
+      { "command": "nova.serve", "title": "NOVA: Serve (start live HTTP server)", "icon": "$(server-environment)" }
+    ],
+    "menus": {
+      "editor/title": [
+        { "command": "nova.run", "when": "resourceLangId == nova", "group": "navigation@1" },
+        { "command": "nova.build", "when": "resourceLangId == nova", "group": "navigation@2" },
+        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "navigation@3" }
+      ],
+      "editor/context": [
+        { "command": "nova.run", "when": "resourceLangId == nova", "group": "nova@1" },
+        { "command": "nova.build", "when": "resourceLangId == nova", "group": "nova@2" },
+        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "nova@3" }
+      ],
+      "explorer/context": [
+        { "command": "nova.run", "when": "resourceLangId == nova", "group": "nova@1" },
+        { "command": "nova.build", "when": "resourceLangId == nova", "group": "nova@2" },
+        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "nova@3" }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "nova.run",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n",
+        "when": "resourceLangId == nova"
+      }
+    ],
+    "configuration": {
+      "title": "NOVA",
+      "properties": {
+        "nova.cliPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to NOVA's `src/cli.js`. Leave empty to auto-detect by walking up from the current file for a folder containing `src/cli.js`."
+        },
+        "nova.defaultServePort": {
+          "type": "number",
+          "default": 3000,
+          "description": "Default port used by \"NOVA: Serve\" when no port is configured per-run."
+        }
+      }
+    }
+  }
+}
