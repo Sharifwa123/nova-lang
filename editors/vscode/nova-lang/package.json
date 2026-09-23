@@ -34,7 +34,8 @@
     "commands": [
       { "command": "nova.run", "title": "NOVA: Run File", "icon": "$(play)" },
       { "command": "nova.build", "title": "NOVA: Build (compile PAGE to HTML)", "icon": "$(package)" },
-      { "command": "nova.serve", "title": "NOVA: Serve (start live HTTP server)", "icon": "$(server-environment)" }
+      { "command": "nova.serve", "title": "NOVA: Serve (start live HTTP server)", "icon": "$(server-environment)" },
+      { "command": "nova.stopServe", "title": "NOVA: Stop Server", "icon": "$(debug-stop)" }
     ],
     "menus": {
       "editor/title": [
@@ -45,12 +46,14 @@
       "editor/context": [
         { "command": "nova.run", "when": "resourceLangId == nova", "group": "nova@1" },
         { "command": "nova.build", "when": "resourceLangId == nova", "group": "nova@2" },
-        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "nova@3" }
+        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "nova@3" },
+        { "command": "nova.stopServe", "when": "resourceLangId == nova", "group": "nova@4" }
       ],
       "explorer/context": [
         { "command": "nova.run", "when": "resourceLangId == nova", "group": "nova@1" },
         { "command": "nova.build", "when": "resourceLangId == nova", "group": "nova@2" },
-        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "nova@3" }
+        { "command": "nova.serve", "when": "resourceLangId == nova", "group": "nova@3" },
+        { "command": "nova.stopServe", "when": "resourceLangId == nova", "group": "nova@4" }
       ]
     },
     "keybindings": [
@@ -73,6 +76,11 @@
           "type": "number",
           "default": 3000,
           "description": "Default port used by \"NOVA: Serve\" when no port is configured per-run."
+        },
+        "nova.openBrowserOnServe": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically open your default browser once \"NOVA: Serve\" is actually answering requests (not on a guessed delay - it's polled)."
         }
       }
     }
