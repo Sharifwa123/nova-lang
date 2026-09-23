@@ -34,7 +34,7 @@ ways to actually install it:
    cd editors/vscode/nova-lang
    npx --yes @vscode/vsce package
    ```
-   This writes `nova-lang-0.1.0.vsix` in that folder.
+   This writes `nova-language-0.1.0.vsix` in that folder.
 2. In VS Code, open the **Extensions** view (`Ctrl+Shift+X` /
    `Cmd+Shift+X`), click the `...` (More Actions) menu at the top of that
    panel, choose **Install from VSIX...**, and pick the `.vsix` file you
@@ -44,17 +44,17 @@ ways to actually install it:
 
 Equivalently, from the command line:
 ```bash
-code --install-extension editors/vscode/nova-lang/nova-lang-0.1.0.vsix
+code --install-extension editors/vscode/nova-lang/nova-language-0.1.0.vsix
 ```
 
 ### Option B — Copy into your extensions folder (no build step at all)
 
 ```bash
 # macOS/Linux
-cp -r editors/vscode/nova-lang ~/.vscode/extensions/nova-lang-0.1.0
+cp -r editors/vscode/nova-lang ~/.vscode/extensions/nova-language-0.1.0
 
 # Windows (PowerShell)
-Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\nova-lang-0.1.0"
+Copy-Item -Recurse editors\vscode\nova-lang "$env:USERPROFILE\.vscode\extensions\nova-language-0.1.0"
 ```
 Then run **Developer: Reload Window** from the Command Palette (or
 restart VS Code). This won't show up in the Extensions list as an

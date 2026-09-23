@@ -1,5 +1,5 @@
 {
-  "name": "nova-lang",
+  "name": "nova-language",
   "displayName": "NOVA Language",
   "description": "Syntax highlighting, and Run/Build/Serve commands, for the NOVA programming language.",
   "version": "0.1.0",
