@@ -6,6 +6,11 @@
   "publisher": "nova-lang",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sharifwa123/nova-lang.git",
+    "directory": "editors/vscode/nova-lang"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },
