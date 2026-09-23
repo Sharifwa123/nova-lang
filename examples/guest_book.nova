@@ -1,0 +1,39 @@
+# v0.16 (ADR-017): FORM/INPUT - a page collecting real, typed user input
+# and sending it to a live API, not just data already known at build time
+# (contrast with booking_page.nova, where a per-record BUTTON's payload
+# came entirely from the room it was rendered for). Try it live:
+#   node src/cli.js serve examples/guest_book.nova 3000
+#   open http://localhost:3000/ in a browser, type a name and message,
+#   click Post - then confirm it really landed:
+#   curl http://localhost:3000/messages
+
+DATA Message
+    author: text
+    body: text
+END
+
+SERVICE
+    API GET "/messages"
+        RETURN GET Message
+    END
+
+    API POST "/messages"
+        SET m = REQUEST AS Message
+        SAVE m
+        RETURN m
+    END
+END
+
+PAGE "/"
+    TITLE "Guestbook"
+    HEADING "Sign the Guestbook"
+    FORM
+        INPUT author: text "Your name"
+        INPUT body: text "Message"
+        BUTTON "Post"
+            WHEN CLICKED
+                CALL API POST "/messages" WITH { author: author, body: body }
+            END
+        END
+    END
+END

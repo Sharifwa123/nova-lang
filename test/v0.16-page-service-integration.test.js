@@ -168,8 +168,8 @@ test("v0.16: a CALL API button compiles to an async function with a stable butto
   const scriptSrc = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   assertEqual(scriptSrc.includes("async function novaClick_0"), true);
   assertEqual(scriptSrc.includes('await fetch("/reservations"'), true);
-  assertEqual(scriptSrc.includes('"roomNumber":101'), true);
-  assertEqual(scriptSrc.includes('"roomNumber":201'), true);
+  assertEqual(scriptSrc.includes('"roomNumber": 101'), true);
+  assertEqual(scriptSrc.includes('"roomNumber": 201'), true);
 });
 
 // ---- diagnostics ----

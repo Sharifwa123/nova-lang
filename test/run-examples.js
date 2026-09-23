@@ -358,6 +358,90 @@ console.log("\n== PAGE + SERVICE integration (nova serve, expect a real click to
   }
 }
 
+// ADR-017 — FORM/INPUT: same real-server, real-generated-script technique
+// as booking_page.nova above, except the DOM stub's INPUT elements get
+// their `.value` set programmatically (standing in for a visitor typing)
+// before the button is "clicked" - so this proves genuinely typed input,
+// not data already known at compile time, reaches the live API intact.
+console.log("\n== PAGE FORM (nova serve, expect typed input to really reach the API) ==");
+{
+  const source = path.join(examplesDir, "guest_book.nova");
+  let ok = false;
+  let failureDetail = "";
+  const child = spawn(process.execPath, [cli, "serve", source, "0"], { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    let stdoutBuf = "";
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timed out waiting for the server to report it's listening.")), 5000);
+      child.stdout.on("data", (chunk) => {
+        stdoutBuf += chunk.toString();
+        const m = stdoutBuf.match(/listening on http:\/\/localhost:(\d+)/);
+        if (m) {
+          clearTimeout(timer);
+          resolve(Number(m[1]));
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error(`Server process exited early (code ${code}).`));
+      });
+    });
+
+    const before = await (await fetch(`http://localhost:${port}/messages`)).json();
+
+    const pageHtml = await (await fetch(`http://localhost:${port}/`)).text();
+    const scriptSrc = pageHtml.match(/<script>([\s\S]*?)<\/script>/)[1];
+    const elements = new Map();
+    for (const m of pageHtml.matchAll(/id="(novaBtn_\d+|novaInput_\d+)"/g)) {
+      if (!elements.has(m[1])) {
+        elements.set(m[1], {
+          value: "",
+          checked: false,
+          disabled: false,
+          _text: "",
+          set textContent(v) { this._text = v; },
+          get textContent() { return this._text; },
+        });
+      }
+    }
+    const sandbox = {
+      document: { getElementById: (id) => elements.get(id) },
+      fetch: (url, opts) => fetch(`http://localhost:${port}${url}`, opts),
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(scriptSrc, sandbox);
+
+    elements.get("novaInput_0").value = "Ada Lovelace";
+    elements.get("novaInput_1").value = "Loved the analytical engine!";
+    await sandbox.novaClick_0();
+
+    const after = await (await fetch(`http://localhost:${port}/messages`)).json();
+
+    ok =
+      before.length === 0 &&
+      elements.get("novaBtn_0").textContent === "Done" &&
+      after.length === 1 &&
+      after[0].author === "Ada Lovelace" &&
+      after[0].body === "Loved the analytical engine!";
+    if (!ok) {
+      failureDetail = `before=${JSON.stringify(before)} after=${JSON.stringify(after)} btnText=${elements.get("novaBtn_0").textContent}`;
+    }
+  } catch (e) {
+    failureDetail = String(e.stack ?? e);
+  } finally {
+    child.kill();
+  }
+
+  if (ok) {
+    console.log(`  OK   guest_book.nova serve -> typed form input really reached the API`);
+    passed++;
+  } else {
+    console.log(`  FAIL guest_book.nova serve`);
+    console.log(indent(failureDetail));
+    failed++;
+  }
+}
+
 function indent(s) {
   return (s ?? "").split("\n").map((l) => "    " + l).join("\n");
 }

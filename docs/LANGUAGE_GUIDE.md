@@ -750,6 +750,40 @@ message. **This only works on a page actually served by `nova serve`**
 (see below) — `nova build`'s static HTML has no live server for the
 request to reach.
 
+### Collecting real user input with FORM
+
+Everything so far sends data the page already knew at build time — a room
+from a loop, or fixed page state. `FORM`/`INPUT` let a visitor type
+something in and have *that* reach the server:
+
+```nova
+PAGE "/"
+    FORM
+        INPUT author: text "Your name"
+        INPUT body: text "Message"
+        BUTTON "Post"
+            WHEN CLICKED
+                CALL API POST "/messages" WITH { author: author, body: body }
+            END
+        END
+    END
+END
+```
+
+`INPUT <name>: <type> "<label>"` declares one field inside a `FORM` —
+`type` must be `integer`, `decimal`, `text`, or `boolean` (the same
+restriction `REQUEST AS` places on its own fields, §16), and the label
+is optional (falls back to the field name). Each renders as a labeled
+HTML input — text, a number field, or a checkbox depending on the type.
+
+A `CALL API`'s `WITH` payload can now reference an `INPUT`'s name
+directly (`author`, `body` above), read live at submit time — unlike a
+loop field or literal (fixed when the page compiles), a form field can
+only be known once a visitor actually types it in.
+
+`FORM` is top-level only inside a `PAGE` (not inside `FOR EACH` or
+another `FORM`) — a form per rendered record isn't supported yet.
+
 ## 18. SERVICE / API: a live HTTP server
 
 Where `PAGE` compiles to a static snapshot, `SERVICE` compiles to a real,
@@ -909,6 +943,7 @@ memory, alongside the API).
 | `SERVICE` / `API` / `GET` / `POST` | live HTTP server declaration |
 | `REQUEST` / `AS` | read and validate a POST request body |
 | `CALL` / `WITH` | call a live API from a page's click handler |
+| `FORM` | a group of user-input fields on a page |
 
 ## 23. Diagnostic code reference
 
@@ -979,6 +1014,10 @@ can ever see).
 | E-SEM-046 | `CALL API` references a method+route no `API` in this file declares |
 | E-SEM-047 | A `CALL API` `WITH` payload field isn't a literal, page-local state, or a valid loop-variable field reference |
 | E-SEM-048 | A `PAGE` route collides with an `API GET` route (`nova serve` now serves both from one server) |
+| E-SEM-049 | `INPUT` used outside a `FORM` |
+| E-SEM-050 | `FORM` declared somewhere other than a `PAGE`'s top level |
+| E-SEM-051 | Duplicate `INPUT` name within one `FORM` |
+| E-SEM-052 | `INPUT` with a non-`integer`/`decimal`/`text`/`boolean` type |
 | E-RUN-001 | Division by zero |
 | E-RUN-002 | No such field on a record |
 | E-RUN-003 | A built-in called with an unsupported argument type |

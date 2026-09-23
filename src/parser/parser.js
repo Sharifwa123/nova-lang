@@ -460,12 +460,21 @@ export class Parser {
         elements.push(this.parsePageState());
       } else if (this.checkKeyword("BUTTON")) {
         elements.push(this.parsePageButton());
+      } else if (this.checkKeyword("FORM")) {
+        elements.push(this.parseForm());
+      } else if (this.checkKeyword("INPUT")) {
+        // ADR-017 — parsed here (not restricted to a FORM's own body) so
+        // "INPUT outside a FORM" is a semantic error (E-SEM-049) with a
+        // clear message, the same "parse generically, restrict
+        // semantically" precedent CALL API (ADR-016) and WHEN CLICKED's
+        // body (ADR-013) already use, rather than a parser-level one.
+        elements.push(this.parseFormInput());
       } else {
         const tok = this.current();
         if (tok.type !== TokenType.KEYWORD || !leafKeywords.includes(tok.value)) {
           this.error(
             CODES.UNEXPECTED_TOKEN,
-            `Expected TITLE, STYLE, HEADING, TEXT, FOR EACH, SET, or BUTTON, but found ${this.describeToken(tok)}.`,
+            `Expected TITLE, STYLE, HEADING, TEXT, FOR EACH, SET, BUTTON, FORM, or INPUT, but found ${this.describeToken(tok)}.`,
             tok
           );
         }
@@ -476,6 +485,52 @@ export class Parser {
       this.skipNewlines();
     }
     return { elements, stoppedAt: "END" };
+  }
+
+  // ADR-017 — form-element ::= "FORM" NEWLINE page-element* "END"
+  // Reuses parsePageElementList wholesale (INPUT is grammar-legal
+  // anywhere a page-element is, restricted to inside a FORM
+  // semantically - see the INPUT branch above).
+  parseForm() {
+    const formTok = this.expectKeyword("FORM");
+    const { elements, stoppedAt } = this.parsePageElementList();
+    if (stoppedAt === "EOF") this.unclosedBlockError(formTok, "FORM block");
+    const end = this.expectKeyword("END");
+    return { kind: "FORM", elements, span: spanOf(formTok.span, end.span) };
+  }
+
+  // ADR-017 — form-input ::= "INPUT" identifier ":" type-name string-literal?
+  // The label is optional - falls back to the field name when omitted.
+  parseFormInput() {
+    const inputTok = this.expectKeyword("INPUT");
+    const name = this.expectIdentifier("a form field name");
+    this.expectPunct(":");
+    const typeTok = this.expectIdentifier("a type name");
+    let label = null;
+    let end = typeTok;
+    if (this.checkType(TokenType.STRING)) {
+      const labelTok = this.current();
+      if (labelTok.value.some((p) => p.kind === "interp")) {
+        this.error(
+          CODES.UNEXPECTED_TOKEN,
+          "An INPUT label cannot contain interpolation.",
+          labelTok,
+          null,
+          'Use a plain string, e.g. INPUT guestName: text "Your name".'
+        );
+      }
+      label = labelTok.value.map((p) => p.value).join("");
+      this.advance();
+      end = labelTok;
+    }
+    return {
+      kind: "FORM_INPUT",
+      name: AST.Identifier(name.value, name.span),
+      type: typeTok.value,
+      typeSpan: typeTok.span,
+      label,
+      span: spanOf(inputTok.span, end.span),
+    };
   }
 
   // ADR-013 — page-local state: SET <name> = <literal>, reusing the exact

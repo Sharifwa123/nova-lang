@@ -6,22 +6,25 @@ Read this section first; the rest of the file is the detailed history and
 rationale behind it.
 
 **State**: v0.1 through v0.12 (the entire originally-planned roadmap) plus
-v0.13/v0.14/v0.15 — the milestones past it: `SERVICE`/`API`, a real, live
-HTTP server, with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>`
-(v0.14, reading/validating the real JSON request body); v0.15 connects
-`PAGE` and `SERVICE` for the first time — `nova serve` now serves compiled
-`PAGE` HTML alongside the API, `BUTTON` is allowed inside `FOR EACH`, and
-a click handler can `CALL API` a declared endpoint and reflect the real
-result, verified with a real spawned server, a real browser-equivalent
-script execution, and a real persisted record (`test/run-examples.js`).
-278 unit tests, 54 examples verified through the *real* CLI (not just
-in-process calls), 16 ADRs, zero npm dependencies, MIT licensed. Verify it
+v0.13-v0.16 — the milestones past it: `SERVICE`/`API`, a real, live HTTP
+server, with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>` (v0.14,
+reading/validating the real JSON request body); v0.15 connects `PAGE` and
+`SERVICE` for the first time — `nova serve` now serves compiled `PAGE`
+HTML alongside the API, `BUTTON` is allowed inside `FOR EACH`, and a click
+handler can `CALL API` a declared endpoint and reflect the real result;
+v0.16 adds `FORM`/`INPUT` — a page can now collect genuinely typed user
+input (not just data already known at build time) and send it to that
+same live API. Both verified with a real spawned server, a real
+browser-equivalent script execution (typed/checked DOM values included),
+and a real persisted record (`test/run-examples.js`).
+290 unit tests, 56 examples verified through the *real* CLI (not just
+in-process calls), 17 ADRs, zero npm dependencies, MIT licensed. Verify it
 yourself before doing anything else:
 ```bash
 git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
 node test/run.js && node test/run-examples.js
 ```
-If that's not 278/278 and 54/54, something's wrong with *your*
+If that's not 290/290 and 56/56, something's wrong with *your*
 environment, not the code — stop and figure out why before writing
 anything new.
 
@@ -49,22 +52,33 @@ anything new.
 
 **What's actually next**, per this file's own roadmap section below —
 genuinely new ground (v0.13's `SERVICE`/`API`, v0.14's `POST`/`REQUEST AS`,
-and v0.15's `PAGE`/`SERVICE` integration were the first three pieces of
-this list; see ADR-014/ADR-015/ADR-016):
-1. `PUT`/`DELETE` on `API` — v0.14 added `POST` (with `REQUEST AS
-   <DataType>` validating the JSON body against a flat, primitive-only
-   `DATA` shape); `PUT` implies "update this existing id" and `DELETE`
-   needs no body at all, each a distinct enough question that ADR-015
-   deliberately left them for later. Also still deferred: nested
-   `DATA`/`list`/`record` fields in a `REQUEST AS` shape, and path
-   parameters/query-string parsing in routing.
-2. A developer-chosen success/failure label for `CALL API` (v0.15 ships a
-   fixed `"Done"`/`"Failed - try again"` — see ADR-016's explicitly
-   deferred list), and statically cross-checking a `CALL API` payload's
-   shape against its target handler's own `REQUEST AS` type (currently
-   only checked at runtime, like any other client).
-3. Security basics (`SECURITY`, still reserved).
-4. Durable persistence (currently in-memory only).
+v0.15's `PAGE`/`SERVICE` integration, and v0.16's `FORM`/`INPUT` were the
+first four pieces of this list; see ADR-014/ADR-015/ADR-016/ADR-017). The
+order below is a full-stack-app priority order, not just "whatever's
+next":
+1. **Durable persistence** — everything `SAVE`/`GET`/`DELETE` does today
+   is in-memory only; a real server restart loses every record. This is
+   the next milestone.
+2. `PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
+   routing — v0.14 added `POST` (with `REQUEST AS <DataType>` validating
+   the JSON body against a flat, primitive-only `DATA` shape); `PUT`
+   implies "update this existing id" and `DELETE` needs no body at all,
+   each a distinct enough question that ADR-015 deliberately left them
+   for later. Also still deferred: nested `DATA`/`list`/`record` fields
+   in a `REQUEST AS` shape.
+3. Auth/security basics (`SECURITY`, still reserved).
+4. Real layout — containers/images; today `PAGE` compiles to bare
+   `<h1>`/`<p>`/`<button>`/`<input>` tags with no wrapping elements, so
+   layout is CSS-positional-selector-only.
+5. SPA navigation — every `PAGE` is currently its own served route with a
+   full page load; no client-side route transitions.
+
+Also still deferred, lower priority than the above: a developer-chosen
+success/failure label for `CALL API` (currently a fixed `"Done"`/`"Failed
+- try again"` — see ADR-016's explicitly deferred list), and statically
+cross-checking a `CALL API` payload's shape against its target handler's
+own `REQUEST AS` type (currently only checked at runtime, like any other
+client).
 
 **One specific warning**: the `PAGE` compiler (ADR-011/012/013) is the
 most structurally novel part of this codebase — first compilation target
@@ -283,6 +297,13 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
   is still scalar-only (no list/record state), there's still no
   `TRY`/`CATCH` inside a click handler, and `CALL API`'s own success/
   failure feedback is a fixed label — no custom message syntax yet.
+- `FORM`/`INPUT` (v0.16, ADR-017) let a `CALL API` payload read genuinely
+  typed, live user input, but `INPUT` is scalar-only (same
+  `integer`/`decimal`/`text`/`boolean` restriction as `REQUEST AS`), a
+  `FORM` must be top-level (not inside `FOR EACH` or another `FORM`), and
+  there's no client-side validation (required fields, min/max, pattern
+  matching) — an empty/malformed field is sent to the API as-is and only
+  caught by the server's own `REQUEST AS` check.
 - `API` supports only `GET` and `POST` (ADR-014/ADR-015) — no `PUT`/
   `DELETE` yet. Routing is exact-match only: no path parameters
   (`/products/:id`), no query-string parsing. The `ASK`-inside-a-handler
@@ -308,27 +329,34 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 ## What's next
 
 **Every milestone in the v0.1–v0.12 roadmap is implemented, plus
-v0.13/v0.14/v0.15 (`SERVICE`/`API`, ADR-014/ADR-015, and `PAGE`/`SERVICE`
-integration, ADR-016) — the milestones past that roadmap.** What's left is
-genuinely new ground:
+v0.13–v0.16 (`SERVICE`/`API`, ADR-014/ADR-015; `PAGE`/`SERVICE`
+integration, ADR-016; `FORM`/`INPUT`, ADR-017) — the milestones past that
+roadmap.** What's left, in the priority order a full-stack app actually
+needs (see the briefing at the top of this file):
 
-1. `PUT`/`DELETE` on `API` — v0.14 added `POST` + `REQUEST AS <DataType>`
-   (validated against a flat, primitive-only `DATA` shape); `PUT` implies
-   "update this existing id" and `DELETE` needs no body at all, each its
-   own real design question ADR-015 deliberately left open. Also still
-   open: nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape, and
-   path parameters/query-string parsing in routing.
-2. A developer-chosen `CALL API` success/failure label, and statically
-   cross-checking a `CALL API` payload's shape against its target
-   handler's own `REQUEST AS` type — v0.15 (ADR-016) deliberately shipped
-   without either (a fixed label; a runtime-only shape check, same as any
-   other client gets).
-3. Security basics (`SECURITY`, still forward-reserved).
-4. Durable (file-backed, not in-memory-only) persistence.
-5. Mobile/desktop targets, native compilation/self-hosting — explicitly
+1. **Durable (file-backed, not in-memory-only) persistence** — next up.
+2. `PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
+   routing — v0.14 added `POST` + `REQUEST AS <DataType>` (validated
+   against a flat, primitive-only `DATA` shape); `PUT` implies "update
+   this existing id" and `DELETE` needs no body at all, each its own real
+   design question ADR-015 deliberately left open. Also still open:
+   nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape.
+3. Auth/security basics (`SECURITY`, still forward-reserved).
+4. Real layout — `PAGE` today compiles to bare tags with no wrapping
+   containers/images; layout is CSS-positional-selector-only.
+5. SPA navigation — no client-side route transitions yet; every `PAGE` is
+   its own full page load.
+6. Mobile/desktop targets, native compilation/self-hosting — explicitly
    multi-month-plus territory.
 
-The process discipline that held for 16 milestones and is worth
+Lower priority than all of the above: a developer-chosen `CALL API`
+success/failure label, and statically cross-checking a `CALL API`
+payload's shape against its target handler's own `REQUEST AS` type — v0.15
+(ADR-016) deliberately shipped without either (a fixed label; a
+runtime-only shape check, same as any other client gets), and v0.16
+(ADR-017) didn't revisit it.
+
+The process discipline that held for 17 milestones and is worth
 continuing for anything past this point: **ADR before implementation**
 for any real design decision, smallest-correct-version per milestone
 (resist doing three milestones' worth of surface in one pass), and
