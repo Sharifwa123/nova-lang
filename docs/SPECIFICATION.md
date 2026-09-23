@@ -1,4 +1,10 @@
-# NOVA v0.1 — Core Language Specification
+# Sharif NOVA v0.1 — Core Language Specification
+
+This specification covers Sharif NOVA, an independent programming language
+and toolchain developed by Sharif Technologies, unrelated to other
+same-named "Nova"/"NovaLang" language projects, editors, or products
+elsewhere in the industry. It is referred to as NOVA throughout this
+document.
 
 Status: Implemented (this repository)
 Scope: Language core only — the lexer, parser, AST, semantic analyzer, and

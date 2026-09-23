@@ -1,9 +1,14 @@
-# NOVA
+# Sharif NOVA
 
-NOVA is a programming language designed to read like natural, ordinary
-instructions to a computer while remaining precise enough for a real
-compiler pipeline — one language meant to eventually span core logic, data,
-UI, and APIs, instead of stitching together a different language per layer.
+Sharif NOVA (referred to as NOVA throughout this document) is an
+independent programming language and toolchain developed by Sharif
+Technologies, unrelated to other same-named "Nova"/"NovaLang" language
+projects, editors, or products elsewhere in the industry.
+
+NOVA is designed to read like natural, ordinary instructions to a computer
+while remaining precise enough for a real compiler pipeline — one language
+meant to eventually span core logic, data, UI, and APIs, instead of
+stitching together a different language per layer.
 
 This repository implements **v0.1 through v0.14**: v0.1–v0.12 is every
 milestone in the language's core design roadmap — lexer → parser → AST →

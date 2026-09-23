@@ -1,10 +1,15 @@
-# The NOVA Language Guide
+# The Sharif NOVA Language Guide
 
-This is a complete, self-contained guide to writing programs in NOVA — from
-your first `SHOW "Hello"` through typed procedures, persistent data, and
-compiling a program into a live website or HTTP service. It assumes no
-prior knowledge of NOVA and doesn't assume you've read anything else in
-this repository first.
+Sharif NOVA (also referred to as NOVA in this guide) is an independent
+programming language and toolchain developed by Sharif Technologies. It is
+unrelated to other, same-named "Nova"/"NovaLang" language projects, editors,
+or products from other developers or companies elsewhere in the industry.
+
+This is a complete, self-contained guide to writing programs in Sharif NOVA
+— from your first `SHOW "Hello"` through typed procedures, persistent data,
+and compiling a program into a live website or HTTP service. It assumes no
+prior knowledge of the language and doesn't assume you've read anything else
+in this repository first.
 
 If you want the precise, binding grammar instead of a guided tour, see
 [SPECIFICATION.md](SPECIFICATION.md). This guide and the specification
@@ -41,7 +46,7 @@ it.
 
 ## 1. What NOVA is
 
-NOVA is a programming language whose statements read close to ordinary
+Sharif NOVA is a programming language whose statements read close to ordinary
 sentences (`SET price = 9.99`, `SHOW "Hello, {name}"`, `FOR EACH item IN
 cart`) while still compiling through a real, strict pipeline: a lexer, a
 parser, a static semantic analyzer, and an interpreter. Nothing about NOVA

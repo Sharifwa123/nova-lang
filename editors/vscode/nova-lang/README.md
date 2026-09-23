@@ -1,5 +1,7 @@
-# NOVA Language (VS Code extension)
+# Sharif NOVA Language (VS Code extension)
 
+VS Code support for Sharif NOVA, the programming language developed by
+Sharif Technologies (referred to as NOVA throughout this document).
 Syntax highlighting for `.nova` files, plus Run/Build/Serve commands wired
 into VS Code's editor toolbar, right-click menu, and Command Palette — the
 same experience most language extensions give you, not just a terminal.

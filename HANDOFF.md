@@ -70,7 +70,10 @@ purpose) isn't obvious from the code alone.
 
 ## What this project is
 
-NOVA is a programming language meant to eventually unify core logic, data
+Sharif NOVA (referred to as NOVA below) is an independent programming
+language and toolchain developed by Sharif Technologies, unrelated to
+other same-named "Nova"/"NovaLang" language projects, editors, or products
+elsewhere in the industry. It's meant to eventually unify core logic, data
 modeling, UI, and APIs into one language — see
 [docs/LANGUAGE_GUIDE.md](docs/LANGUAGE_GUIDE.md) for a complete guided tour
 of the language as it exists today, [docs/SPECIFICATION.md](docs/SPECIFICATION.md)

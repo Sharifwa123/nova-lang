@@ -1,7 +1,7 @@
 {
   "name": "sharif-tech-nova-lang",
   "displayName": "NOVA Language by Sharif Technologies",
-  "description": "Syntax highlighting, and Run/Build/Serve commands, for the NOVA programming language.",
+  "description": "Syntax highlighting, and Run/Build/Serve commands, for Sharif NOVA - the programming language developed by Sharif Technologies.",
   "version": "0.3.0",
   "publisher": "sharif-tech",
   "private": true,
