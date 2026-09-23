@@ -59,6 +59,46 @@ function resolvePageValue(expr, bindings) {
   return display(value);
 }
 
+// ADR-016 — unwraps a runtime Value ({type, value}, values.js) to a plain
+// JS value suitable for JSON.stringify - display()'s formatted-text
+// output is wrong for a JSON payload field (a decimal price must stay a
+// JSON number, not become the string "149").
+function rawJsValue(v) {
+  if (v.type === "list") return v.value.map(rawJsValue);
+  if (v.type === "record") {
+    const out = {};
+    for (const [key, val] of Object.entries(v.value)) out[key] = rawJsValue(val);
+    return out;
+  }
+  return v.value; // integer/decimal/text/boolean: v.value is already the right JS primitive
+}
+
+// ADR-016 — the CALL API WITH-payload analogue of resolvePageValue: same
+// literal-or-loopVar.field resolution, but returning a raw JS value
+// instead of display()-formatted text.
+function resolvePageValueRaw(expr, bindings) {
+  if (expr.kind !== "FieldAccess") return literalJsValue(expr);
+  const fields = [];
+  let root = expr;
+  while (root.kind === "FieldAccess") {
+    fields.unshift(root.field);
+    root = root.target;
+  }
+  let value = bindings.get(root.name);
+  for (const field of fields) value = value.value[field];
+  return rawJsValue(value);
+}
+
+// ADR-016 — resolves a CALL API WITH record literal to a plain JS object
+// (compile-time, mirroring how a data-bound HEADING resolves its text).
+function resolvePayload(recordLiteral, bindings) {
+  const obj = {};
+  for (const field of recordLiteral.fields) {
+    obj[field.name] = resolvePageValueRaw(field.value, bindings);
+  }
+  return obj;
+}
+
 // ADR-013 — translates one already-validated "safe" expression (literal,
 // page-state reference, or +-*/ ==!= <><= >= AND OR NOT over those) to a
 // JavaScript expression string. Only ever called on expressions
@@ -121,10 +161,18 @@ export function compilePage(page, store = new Map()) {
       }
 
       if (el.kind === "BUTTON") {
-        const fnName = `novaClick_${nextButtonId++}`;
-        buttons.push({ fnName, actions: el.actions });
+        // ADR-016 — `bindings` (the current FOR EACH record, if any) is
+        // captured alongside the actions so a CALL API's WITH payload can
+        // be resolved against the SAME concrete record this button's own
+        // label already is (resolvePageValue, just above). A stable id
+        // lets a CALL API action's generated function reach back into the
+        // DOM for its own success/failure feedback.
+        const buttonIndex = nextButtonId++;
+        const fnName = `novaClick_${buttonIndex}`;
+        const btnId = `novaBtn_${buttonIndex}`;
+        buttons.push({ fnName, btnId, actions: el.actions, bindings });
         const labelText = escapeHtml(resolvePageValue(el.label, bindings));
-        bodyParts.push(`  <button onclick="${fnName}()">${labelText}</button>`);
+        bodyParts.push(`  <button id="${btnId}" onclick="${fnName}()">${labelText}</button>`);
         continue;
       }
 
@@ -174,11 +222,15 @@ export function compilePage(page, store = new Map()) {
   return { path: routeToOutputPath(page.route), html };
 }
 
-// ADR-013 — one <script> block: a `state` object, a `render()` that
-// updates every state-bound element's textContent (never innerHTML - it
-// cannot be interpreted as markup, so no escaping is needed here even
+// ADR-013/ADR-016 — one <script> block: a `state` object, a `render()`
+// that updates every state-bound element's textContent (never innerHTML -
+// it cannot be interpreted as markup, so no escaping is needed here even
 // though the initial server-rendered HTML above does need it), and one
-// named function per BUTTON applying its CHANGEs then calling render().
+// named function per BUTTON applying its actions then calling render().
+// A button whose actions include a CALL API compiles to an `async`
+// function that awaits a real fetch and gives itself direct success/
+// failure feedback (ADR-016); a plain CHANGE-only button is completely
+// unaffected - same synchronous function ADR-013 always produced.
 function buildScript(initialState, stateBoundElements, buttons) {
   if (Object.keys(initialState).length === 0 && buttons.length === 0) return "";
 
@@ -191,10 +243,32 @@ function buildScript(initialState, stateBoundElements, buttons) {
     lines.push(`  document.getElementById(${JSON.stringify(id)}).textContent = novaDisplay(state.${stateName});`);
   }
   lines.push(`}`);
-  for (const { fnName, actions } of buttons) {
-    lines.push(`function ${fnName}() {`);
+  for (const { fnName, btnId, actions, bindings } of buttons) {
+    const isAsync = actions.some((a) => a.kind === "CallApiStatement");
+    lines.push(`${isAsync ? "async " : ""}function ${fnName}() {`);
+    if (isAsync) {
+      lines.push(`  var novaBtn = document.getElementById(${JSON.stringify(btnId)});`);
+    }
     for (const action of actions) {
-      lines.push(`  state.${action.name.name} = ${compileExprToJs(action.value)};`);
+      if (action.kind === "ChangeStatement") {
+        lines.push(`  state.${action.name.name} = ${compileExprToJs(action.value)};`);
+        continue;
+      }
+      // CallApiStatement (ADR-016).
+      const fetchOpts = [`method: ${JSON.stringify(action.method)}`];
+      if (action.payload) {
+        fetchOpts.push(`headers: { "Content-Type": "application/json" }`);
+        fetchOpts.push(`body: JSON.stringify(${JSON.stringify(resolvePayload(action.payload, bindings))})`);
+      }
+      lines.push(`  novaBtn.disabled = true;`);
+      lines.push(`  try {`);
+      lines.push(`    var novaRes = await fetch(${JSON.stringify(action.route)}, { ${fetchOpts.join(", ")} });`);
+      lines.push(`    if (!novaRes.ok) throw new Error("request failed");`);
+      lines.push(`    novaBtn.textContent = "Done";`);
+      lines.push(`  } catch (novaErr) {`);
+      lines.push(`    novaBtn.textContent = "Failed - try again";`);
+      lines.push(`    novaBtn.disabled = false;`);
+      lines.push(`  }`);
     }
     lines.push(`  render();`);
     lines.push(`}`);
@@ -211,4 +285,17 @@ export function compileProgram(program, store = new Map()) {
   return program.statements
     .filter((stmt) => stmt.kind === "PageDeclaration")
     .map((page) => compilePage(page, store));
+}
+
+// ADR-016 — the `nova serve` analogue of compileProgram: keyed by each
+// PAGE's own route string (e.g. "/catalog"), not the file path
+// routeToOutputPath produces (e.g. "catalog.html"), since the live server
+// serves a route directly rather than writing a file.
+export function collectPageRoutes(program, store = new Map()) {
+  const routes = new Map();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "PageDeclaration") continue;
+    routes.set(stmt.route, compilePage(stmt, store).html);
+  }
+  return routes;
 }

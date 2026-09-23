@@ -10,7 +10,7 @@ while remaining precise enough for a real compiler pipeline — one language
 meant to eventually span core logic, data, UI, and APIs, instead of
 stitching together a different language per layer.
 
-This repository implements **v0.1 through v0.14**: v0.1–v0.12 is every
+This repository implements **v0.1 through v0.15**: v0.1–v0.12 is every
 milestone in the language's core design roadmap — lexer → parser → AST →
 semantic analyzer → tree-walking interpreter, covering the core language
 (SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
@@ -18,16 +18,20 @@ procedures, `DATA` named types, in-memory persistence (`SAVE`/`GET`/
 `DELETE`), a small stdlib, `ASK` input, list indexing/mutation,
 `TRY`/`CATCH` error handling, and a `PAGE` compiler (`nova build`)
 spanning static HTML, data-bound content, and real client-side
-interactivity (`BUTTON`/`WHEN CLICKED` compiled to JavaScript). v0.13 and
-v0.14 are the first milestones past that original roadmap: `SERVICE`/`API`
-compile to a real, live HTTP server (`nova serve`) sharing one persistence
-store across every request, with `GET` (v0.13) and `POST` +
+interactivity (`BUTTON`/`WHEN CLICKED` compiled to JavaScript). v0.13
+through v0.15 are the milestones past that original roadmap: `SERVICE`/
+`API` compile to a real, live HTTP server (`nova serve`) sharing one
+persistence store across every request, with `GET` (v0.13) and `POST` +
 `REQUEST AS <DataType>` (v0.14) reading and validating a real JSON request
-body. Start with [docs/LANGUAGE_GUIDE.md](docs/LANGUAGE_GUIDE.md) to learn
-the language and write programs; see
-[docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding language
-specification, and [HANDOFF.md](HANDOFF.md) for project history and
-what's next.
+body; v0.15 connects `PAGE` and `SERVICE` for the first time — `nova
+serve` now serves compiled `PAGE` HTML alongside the API, `BUTTON` works
+inside `FOR EACH`, and a click handler can `CALL API` a declared endpoint
+and reflect the real result, so backend, API, and frontend can genuinely
+be written and run together from one file. Start with
+[docs/LANGUAGE_GUIDE.md](docs/LANGUAGE_GUIDE.md) to learn the language and
+write programs; see [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the
+binding language specification, and [HANDOFF.md](HANDOFF.md) for project
+history and what's next.
 
 ## Install
 
@@ -72,6 +76,11 @@ node src/cli.js serve examples/api_service.nova 3000      # live HTTP server (SE
 #   curl http://localhost:3000/hello
 #   curl http://localhost:3000/products
 #   curl -X POST -d '{"name":"Sprocket","price":4.25}' http://localhost:3000/products
+
+node src/cli.js serve examples/booking_page.nova 3000     # PAGE + SERVICE together
+# open http://localhost:3000/ in a browser and click "Book Now" - it
+# really calls the live API and books the room; confirm with:
+#   curl http://localhost:3000/reservations
 ```
 
 ```nova

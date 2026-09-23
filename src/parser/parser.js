@@ -197,6 +197,7 @@ export class Parser {
         case "TRY": return this.parseTry();
         case "PAGE": return this.parsePage();
         case "SERVICE": return this.parseService();
+        case "CALL": return this.parseCallApi();
         case "END":
           this.error(
             CODES.UNEXPECTED_END,
@@ -612,6 +613,66 @@ export class Parser {
       body: block.statements,
       span: spanOf(apiTok.span, end.span),
     };
+  }
+
+  // ADR-016 — call-api-statement ::= "CALL" "API" ("GET"|"POST")
+  //           string-literal ( "WITH" record-literal )?
+  // Parsed generically (any statement position), like WHEN CLICKED's own
+  // body (ADR-013) - restricting it to a click handler is a semantic
+  // check, not a parser one.
+  parseCallApi() {
+    const callTok = this.expectKeyword("CALL");
+    this.expectKeyword("API", 'CALL must be followed by API, e.g. CALL API POST "/reservations".');
+    let methodTok;
+    if (this.checkKeyword("GET") || this.checkKeyword("POST")) {
+      methodTok = this.advance();
+    } else {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected GET or POST, but found ${this.describeToken(this.current())}.`,
+        this.current(),
+        null,
+        'CALL API must be followed by GET or POST, e.g. CALL API POST "/reservations".'
+      );
+    }
+    const routeTok = this.current();
+    if (routeTok.type !== TokenType.STRING) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        `Expected a route (a string literal), but found ${this.describeToken(routeTok)}.`,
+        routeTok,
+        null,
+        'CALL API must be followed by a route string, e.g. CALL API POST "/reservations".'
+      );
+    }
+    if (routeTok.value.some((p) => p.kind === "interp")) {
+      this.error(
+        CODES.UNEXPECTED_TOKEN,
+        "A CALL API route cannot contain interpolation.",
+        routeTok,
+        null,
+        'Use a plain string, e.g. CALL API POST "/reservations".'
+      );
+    }
+    const route = routeTok.value.map((p) => p.value).join("");
+    this.advance();
+    let payload = null;
+    let end = routeTok;
+    if (this.checkKeyword("WITH")) {
+      this.advance();
+      if (!this.checkPunct("{")) {
+        this.error(
+          CODES.UNEXPECTED_TOKEN,
+          `Expected a record literal after WITH, but found ${this.describeToken(this.current())}.`,
+          this.current(),
+          null,
+          "CALL API ... WITH must be followed by a record literal, e.g. WITH { roomNumber: room.number }."
+        );
+      }
+      payload = this.parseRecordLiteral(this.current());
+      end = payload;
+    }
+    return AST.CallApiStatement(methodTok.value, route, routeTok.span, payload, spanOf(callTok.span, end.span));
   }
 
   // ADR-006 — delete-statement ::= "DELETE" identifier expression

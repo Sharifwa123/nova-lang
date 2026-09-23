@@ -695,13 +695,60 @@ renders a button; its `WHEN CLICKED` block runs when a visitor actually
 clicks it.
 
 Click handlers are intentionally restricted: every statement inside one
-must be a `CHANGE` to page-local state, and the right-hand side must be a
-"safe" expression — literals, other page-local state, and the ordinary
-operators combining them. Calls, `SAVE`/`GET`/`ASK`, field/index access,
-and list/record literals aren't allowed inside a click handler. This isn't
-an arbitrary restriction — a click handler runs as real JavaScript in a
-stranger's browser, and NOVA keeps that surface deliberately small and
-checkable rather than letting arbitrary server-style code run there.
+must be a `CHANGE` to page-local state or a `CALL API` (below), and a
+`CHANGE`'s right-hand side must be a "safe" expression — literals, other
+page-local state, and the ordinary operators combining them. Calls,
+`SAVE`/`GET`/`ASK`, field/index access, and list/record literals aren't
+allowed inside a click handler. This isn't an arbitrary restriction — a
+click handler runs as real JavaScript in a stranger's browser, and NOVA
+keeps that surface deliberately small and checkable rather than letting
+arbitrary server-style code run there.
+
+### Calling a live API from a page
+
+A `BUTTON` can appear inside a `FOR EACH` too — one button per rendered
+record — and its click handler can reach a real `SERVICE`/`API` endpoint
+with `CALL API`:
+
+```nova
+PAGE "/"
+    HEADING "Available Rooms"
+    FOR EACH room IN GET Room
+        HEADING room.roomType
+        TEXT room.pricePerNight
+        BUTTON "Book Now"
+            WHEN CLICKED
+                CALL API POST "/reservations" WITH { roomNumber: room.number }
+            END
+        END
+    END
+END
+
+SERVICE
+    API POST "/reservations"
+        SET r = REQUEST AS Reservation
+        SAVE r
+        RETURN r
+    END
+END
+```
+
+`CALL API GET|POST "<route>"` optionally takes `WITH { field: value, ... }`
+— a payload sent as the request's JSON body. Each field's value follows
+the same rule any other page content does: a literal, page-local state, or
+a field of the enclosing `FOR EACH`'s loop variable (`room.number` above —
+resolved to the *specific* room's number when that specific button is
+compiled, so each rendered room's button books the right room). The
+method+route must match a real `API` declared somewhere in the same file
+— a typo or an undeclared route is caught at compile time, not left to
+fail silently in the browser.
+
+On click, the button disables itself, sends the request, and shows
+`"Done"` on success or `"Failed - try again"` (and re-enables) if the
+request fails — there's no syntax yet for a custom success/failure
+message. **This only works on a page actually served by `nova serve`**
+(see below) — `nova build`'s static HTML has no live server for the
+request to reach.
 
 ## 18. SERVICE / API: a live HTTP server
 
@@ -779,7 +826,13 @@ to block on.
 A runtime error inside a handler (for example, `DELETE`ing with a bad id
 type, somehow) becomes an HTTP `500` with the error message as JSON,
 without taking the whole server down. An unmatched method+route is a
-`404`.
+`404` — unless it's a `GET` matching a `PAGE` route declared in the same
+file, in which case `nova serve` serves that page's compiled HTML instead
+(the same compilation `nova build` does, run once at startup against the
+same populated store). This is what lets a page's own `CALL API` button
+(§17) reach a same-server endpoint at all. A `PAGE` route and an `API GET`
+route can't share the same path — that's a compile-time error, not a
+runtime ambiguity.
 
 ## 19. The command line
 
@@ -787,13 +840,14 @@ without taking the whole server down. An unmatched method+route is a
 |---|---|
 | `nova run <file>.nova` | Runs the file's statements top to bottom, printing `SHOW` output and prompting for `ASK` input, exactly like an ordinary script. |
 | `nova build <file>.nova` | Runs the file's statements once, silently, then compiles every `PAGE` declaration to HTML under a `dist/` folder next to the file. |
-| `nova serve <file>.nova [port]` | Runs the file's statements once, silently, then starts a live HTTP server for every `SERVICE`/`API` declaration (default port `3000`). |
+| `nova serve <file>.nova [port]` | Runs the file's statements once, silently, then starts a live HTTP server for every `SERVICE`/`API` declaration *and* every `PAGE` declaration (default port `3000`). |
 
 A single file can hold ordinary script statements, `PAGE`s, and a
 `SERVICE` all at once — which parts actually do anything depends entirely
 on which of the three commands you run. `nova run` never looks at `PAGE`
 or `SERVICE` content; `nova build` never starts a server; `nova serve`
-never writes HTML files.
+never writes HTML files (it serves compiled `PAGE` HTML directly, in
+memory, alongside the API).
 
 ## 20. Scope rules, in one place
 
@@ -854,6 +908,7 @@ never writes HTML files.
 | `BUTTON` / `WHEN` / `CLICKED` | interactive page behavior |
 | `SERVICE` / `API` / `GET` / `POST` | live HTTP server declaration |
 | `REQUEST` / `AS` | read and validate a POST request body |
+| `CALL` / `WITH` | call a live API from a page's click handler |
 
 ## 23. Diagnostic code reference
 
@@ -920,6 +975,10 @@ can ever see).
 | E-SEM-042 | `REQUEST` used outside an `API POST` handler's own body |
 | E-SEM-043 | `REQUEST AS` a `DATA` type with an unsupported field type |
 | E-SEM-044 | `SERVICE` declared somewhere other than a file's top level |
+| E-SEM-045 | `CALL API` used outside a `BUTTON`'s `WHEN CLICKED` block |
+| E-SEM-046 | `CALL API` references a method+route no `API` in this file declares |
+| E-SEM-047 | A `CALL API` `WITH` payload field isn't a literal, page-local state, or a valid loop-variable field reference |
+| E-SEM-048 | A `PAGE` route collides with an `API GET` route (`nova serve` now serves both from one server) |
 | E-RUN-001 | Division by zero |
 | E-RUN-002 | No such field on a record |
 | E-RUN-003 | A built-in called with an unsupported argument type |

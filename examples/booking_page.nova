@@ -1,0 +1,58 @@
+# v0.16 (ADR-016): a PAGE button, per record inside a FOR EACH, that
+# actually calls a live API and reflects the result - the piece that was
+# missing after v0.13/v0.14 gave NOVA a real backend and v0.10-0.12 gave
+# it a real frontend, but never connected the two. Try it live:
+#   node src/cli.js serve examples/booking_page.nova 3000
+#   open http://localhost:3000/ in a browser and click "Book Now"
+#   curl http://localhost:3000/reservations   # the click really landed
+#
+# `nova serve` now serves this PAGE's compiled HTML at "/" itself (not
+# just the API routes) - that's what makes CALL API's same-origin fetch
+# meaningful at all. `nova build` still works exactly as before (a static
+# snapshot, no server) - only `nova serve` connects PAGE and SERVICE/API.
+
+DATA Room
+    number: integer
+    roomType: text
+    pricePerNight: decimal
+END
+
+DATA Reservation
+    roomNumber: integer
+END
+
+DO makeRoom RETURNS Room
+    INPUT n: integer
+    INPUT t: text
+    INPUT price: decimal
+    RETURN { number: n, roomType: t, pricePerNight: price }
+END
+
+SAVE makeRoom(101, "Single", 79.00)
+SAVE makeRoom(201, "Double", 119.00)
+
+PAGE "/"
+    TITLE "Book a Room"
+    HEADING "Available Rooms"
+    FOR EACH room IN GET Room
+        HEADING room.roomType
+        TEXT room.pricePerNight
+        BUTTON "Book Now"
+            WHEN CLICKED
+                CALL API POST "/reservations" WITH { roomNumber: room.number }
+            END
+        END
+    END
+END
+
+SERVICE
+    API GET "/reservations"
+        RETURN GET Reservation
+    END
+
+    API POST "/reservations"
+        SET r = REQUEST AS Reservation
+        SAVE r
+        RETURN r
+    END
+END

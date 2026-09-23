@@ -78,3 +78,9 @@ export const IndexAccess = (target, index, span) => node("IndexAccess", { target
 // against `typeName`'s declared fields.
 export const RequestExpression = (typeName, typeNameSpan, span) =>
   node("RequestExpression", { typeName, typeNameSpan }, span);
+
+// ADR-016 — only legal inside a BUTTON's WHEN CLICKED body (checked
+// semantically, like WHEN CLICKED's other restrictions, ADR-013).
+// `payload` is a RecordLiteral|null.
+export const CallApiStatement = (method, route, routeSpan, payload, span) =>
+  node("CallApiStatement", { method, route, routeSpan, payload }, span);

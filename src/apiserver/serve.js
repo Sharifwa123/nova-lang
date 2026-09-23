@@ -6,6 +6,7 @@
 import http from "node:http";
 import { NovaError } from "../diagnostics/diagnostic.js";
 import { CODES } from "../diagnostics/codes.js";
+import { collectPageRoutes } from "../pagecompiler/compile.js";
 
 // ADR-015 — these two are, definitionally, "the client sent a body that
 // doesn't match what this endpoint declared it needs" - a client error,
@@ -70,7 +71,7 @@ async function readJsonBody(req) {
   }
 }
 
-async function handleRequest(req, res, interpreter, routes) {
+async function handleRequest(req, res, interpreter, routes, pageRoutes) {
   const url = new URL(req.url, "http://localhost");
   // Declared routes are stored under their literal, already-decoded text
   // (e.g. `API GET "/café"` registers the key "GET /café"), but a real
@@ -87,6 +88,16 @@ async function handleRequest(req, res, interpreter, routes) {
   }
   const api = routes.get(`${req.method} ${pathname}`);
   if (!api) {
+    // ADR-016 — a GET request that doesn't match a declared API falls
+    // through to a compiled PAGE at the same route, if one exists (both
+    // now live on the one server). The analyzer already rejects a PAGE
+    // and an API GET sharing a route (E-SEM-048), so this lookup can
+    // never be ambiguous.
+    if (req.method === "GET" && pageRoutes.has(pathname)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(pageRoutes.get(pathname));
+      return;
+    }
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: `No API endpoint for ${req.method} ${pathname}` }));
     return;
@@ -116,9 +127,9 @@ async function handleRequest(req, res, interpreter, routes) {
 }
 
 // The actual (req, res) => void handler passed to http.createServer.
-export function createRequestListener(interpreter, routes) {
+export function createRequestListener(interpreter, routes, pageRoutes = new Map()) {
   return (req, res) => {
-    handleRequest(req, res, interpreter, routes).catch((e) => {
+    handleRequest(req, res, interpreter, routes, pageRoutes).catch((e) => {
       // An actual interpreter bug reaching here, already past the
       // NovaError handling above - crash loudly rather than hide it
       // (Node's default for an uncaught exception in a request handler).
@@ -135,7 +146,11 @@ export function createRequestListener(interpreter, routes) {
 // gets logged, read back from the server itself once it's listening.
 export function startServer(interpreter, program, { port = 3000, log = console.log } = {}) {
   const routes = collectApiRoutes(program);
-  const server = http.createServer(createRequestListener(interpreter, routes));
+  // ADR-016 — PAGE routes are compiled once here, against the same
+  // already-populated store `nova build` uses (ADR-012's snapshot model
+  // is unchanged: pages do not recompile per request).
+  const pageRoutes = collectPageRoutes(program, interpreter.store);
+  const server = http.createServer(createRequestListener(interpreter, routes, pageRoutes));
   server.listen(port, () => {
     log(`NOVA service listening on http://localhost:${server.address().port}`);
   });

@@ -100,6 +100,7 @@ export class Analyzer {
     // Two phases so DATA types and procedures can forward- and
     // self-reference each other regardless of declaration order (ADR-005).
     this.registerTopLevelDeclarations(this.program.statements);
+    this.checkPageApiRouteCollisions();
     this.resolveTopLevelTypes();
     this.checkStatements(this.program.statements, this.globalScope, {
       insideProcedure: false,
@@ -342,6 +343,28 @@ export class Analyzer {
     this.pages.set(stmt.route, stmt);
   }
 
+  // ADR-016 — nova serve now serves both PAGE and API routes from one
+  // server, so a PAGE route and an API GET route claiming the same path
+  // would be a genuine runtime ambiguity (both want "GET <route>"). Both
+  // route tables are fully populated by the time registerTopLevelDeclarations
+  // finishes (phase 1), regardless of which kind of declaration appeared
+  // first in the file, so this runs once right after it.
+  checkPageApiRouteCollisions() {
+    for (const [route, page] of this.pages) {
+      const key = `GET ${route}`;
+      if (this.apiRoutes.has(key)) {
+        err(
+          CODES.PAGE_ROUTE_COLLIDES_WITH_API,
+          `PAGE "${route}" and API GET "${route}" cannot share the same route - nova serve serves both PAGE and API routes from one server.`,
+          page.routeSpan,
+          "A GET request to this path would be ambiguous between the compiled page and the API handler.",
+          "Use a different route for one of the two.",
+          [[this.apiRoutes.get(key).routeSpan, "The colliding API GET is declared here"]]
+        );
+      }
+    }
+  }
+
   // ADR-013 — page-local state (SET at a PAGE's top level) is collected
   // once, up front, so BUTTON/TEXT/HEADING can reference it regardless of
   // where in the page it's declared (the same "register names first"
@@ -401,17 +424,12 @@ export class Analyzer {
       }
 
       if (el.kind === "BUTTON") {
-        if (!topLevel) {
-          err(
-            CODES.BUTTON_INSIDE_LOOP_NOT_SUPPORTED,
-            "BUTTON inside FOR EACH is not supported yet.",
-            el.span,
-            "A button per rendered record needs to know which record it belongs to - a real design question left to a later milestone.",
-            null
-          );
-        }
+        // ADR-016 — BUTTON is now allowed inside FOR EACH: a per-record
+        // button's label and click-handler data are both resolved against
+        // the concrete bound record at PAGE-compile time (loopVarStack),
+        // the same way HEADING/TEXT already resolve loop-bound content.
         this.checkPageContent(el.label, loopVarStack, stateVars);
-        for (const action of el.actions) this.checkButtonAction(action, stateVars);
+        for (const action of el.actions) this.checkButtonAction(action, stateVars, loopVarStack);
         continue;
       }
 
@@ -446,14 +464,16 @@ export class Analyzer {
     }
   }
 
-  // ADR-012/ADR-013 — a page-element's value is valid iff it's a plain
-  // literal, a field-access chain rooted at an enclosing FOR EACH's loop
-  // variable (checked against that DATA type's real fields via
-  // staticFieldType), or a bare reference to page-local state.
-  checkPageContent(expr, loopVarStack, stateVars) {
-    if (isStaticLiteral(expr)) return;
+  // ADR-012/ADR-013/ADR-016 — shared by any page-side value slot (ordinary
+  // page content and a CALL API WITH payload field, ADR-016): valid iff
+  // it's a plain literal, a field-access chain rooted at an enclosing FOR
+  // EACH's loop variable (checked against that DATA type's real fields via
+  // staticFieldType), or a bare reference to page-local state. Each call
+  // site raises its own contextually-accurate error on failure.
+  isValidPageValueRef(expr, loopVarStack, stateVars) {
+    if (isStaticLiteral(expr)) return true;
 
-    if (expr.kind === "Identifier" && stateVars.has(expr.name)) return;
+    if (expr.kind === "Identifier" && stateVars.has(expr.name)) return true;
 
     if (expr.kind === "FieldAccess") {
       const fields = [];
@@ -467,37 +487,50 @@ export class Analyzer {
         if (frame) {
           let currentType = frame.dataTypeName;
           for (const field of fields) currentType = this.staticFieldType(currentType, field, expr.span);
-          return;
+          return true;
         }
       }
     }
 
+    return false;
+  }
+
+  pageValueHintText(loopVarStack, stateVars) {
     const hints = [];
     if (loopVarStack.length > 0) {
       hints.push(`a field of ${loopVarStack.map((f) => `"${f.name}"`).join("/")} (the current FOR EACH loop variable)`);
     }
     if (stateVars.size > 0) hints.push("a reference to page-local state declared with SET");
-    const hintText = hints.length > 0 ? ` or ${hints.join(", or ")}` : "";
+    return hints.length > 0 ? ` or ${hints.join(", or ")}` : "";
+  }
+
+  checkPageContent(expr, loopVarStack, stateVars) {
+    if (this.isValidPageValueRef(expr, loopVarStack, stateVars)) return;
     err(
       CODES.PAGE_CONTENT_NOT_STATIC,
-      `This requires a plain literal value${hintText} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
+      `This requires a plain literal value${this.pageValueHintText(loopVarStack, stateVars)} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
       expr.span,
       "PAGE content is compiled, not run, so there is no variable state for anything else to resolve against.",
       null
     );
   }
 
-  // ADR-013 — validates one statement inside a BUTTON's WHEN CLICKED
-  // block. Only CHANGE targeting page-local state, with a "safe"
-  // expression, is allowed - see assertNoUnsafeConstructs for why type/
-  // name correctness and sandboxing are checked as two separate passes.
-  checkButtonAction(action, stateVars) {
+  // ADR-013/ADR-016 — validates one statement inside a BUTTON's WHEN
+  // CLICKED block. Only CHANGE targeting page-local state (a "safe"
+  // expression - see assertNoUnsafeConstructs for why type/name
+  // correctness and sandboxing are checked as two separate passes) or
+  // CALL API (ADR-016) is allowed.
+  checkButtonAction(action, stateVars, loopVarStack) {
+    if (action.kind === "CallApiStatement") {
+      this.checkCallApiAction(action, stateVars, loopVarStack);
+      return;
+    }
     if (action.kind !== "ChangeStatement") {
       err(
         CODES.BUTTON_ACTION_NOT_CHANGE,
-        `Only CHANGE is allowed inside WHEN CLICKED, but found ${action.kind}.`,
+        `Only CHANGE or CALL API is allowed inside WHEN CLICKED, but found ${action.kind}.`,
         action.span,
-        "SAVE, GET, ASK, and procedure calls are never permitted in a click handler - a click handler can only update page-local state.",
+        "SAVE, GET, ASK, and procedure calls are never permitted in a click handler - a click handler can only update page-local state or call a declared API.",
         null
       );
     }
@@ -527,6 +560,56 @@ export class Analyzer {
     const exprType = this.infer(action.value, stateScope);
     const existingType = stateVars.get(action.name.name);
     stateVars.set(action.name.name, this.reassignCompatibleType(existingType, exprType, action.name.name, action.span));
+  }
+
+  // ADR-016 — validates a CALL API statement inside a click handler: the
+  // method+route must match a real API declared somewhere in this file
+  // (reusing `this.apiRoutes`, the exact map registerService/ADR-014
+  // already builds), and every WITH payload field must be a valid
+  // page-side value reference (isValidPageValueRef, shared with ordinary
+  // page content). The payload's shape is deliberately NOT cross-checked
+  // against the target handler's own REQUEST AS type here - see the ADR
+  // for why that's an explicit, named boundary, not a gap: a mismatch
+  // surfaces at runtime exactly like it would for any other client
+  // (E-RUN-008/E-RUN-009), reaching this page as an ordinary failed
+  // request.
+  checkCallApiAction(action, stateVars, loopVarStack) {
+    const key = `${action.method} ${action.route}`;
+    if (!this.apiRoutes.has(key)) {
+      const available = [...this.apiRoutes.keys()];
+      err(
+        CODES.CALL_API_UNKNOWN_ROUTE,
+        `CALL API ${action.method} "${action.route}" doesn't match any API declared in this file.`,
+        action.routeSpan,
+        available.length > 0
+          ? `Declared in this file: ${available.join(", ")}.`
+          : "This file has no SERVICE/API declarations yet.",
+        "Check the method and route spelling, or declare this API first."
+      );
+    }
+    if (action.payload) {
+      const seenFields = new Map();
+      for (const field of action.payload.fields) {
+        if (seenFields.has(field.name)) {
+          err(
+            CODES.DUPLICATE_FIELD,
+            `"${field.name}" is already set in this CALL API's WITH payload.`,
+            field.nameSpan,
+            "A record literal cannot repeat a field name.",
+            `Remove one of the two "${field.name}:" entries.`,
+            [[seenFields.get(field.name), `"${field.name}" was first set here`]]
+          );
+        }
+        seenFields.set(field.name, field.nameSpan);
+        if (!this.isValidPageValueRef(field.value, loopVarStack, stateVars)) {
+          err(
+            CODES.CALL_API_PAYLOAD_NOT_STATIC,
+            `This field must be a plain literal${this.pageValueHintText(loopVarStack, stateVars)} — CALL API's payload is built at compile time, not run.`,
+            field.value.span
+          );
+        }
+      }
+    }
   }
 
   // ADR-013 — the sandboxing half of click-handler validation: no calls,
@@ -993,6 +1076,20 @@ export class Analyzer {
         }
         return;
       }
+
+      // ADR-016 — a CallApiStatement reached through ordinary statement
+      // dispatch is, by construction, NOT inside a click handler: a
+      // legitimate one is only ever visited via checkButtonAction, which
+      // never calls checkStatement.
+      case "CallApiStatement":
+        err(
+          CODES.CALL_API_OUTSIDE_CLICK_HANDLER,
+          "CALL API can only be used inside a BUTTON's WHEN CLICKED block.",
+          stmt.span,
+          "CALL API compiles to a browser-side network request - it has no meaning in a script, procedure, or API handler body.",
+          "Move this inside a BUTTON ... WHEN CLICKED ... END block."
+        );
+        return;
 
       default:
         throw new Error(`Analyzer: unhandled statement kind '${stmt.kind}'`);
