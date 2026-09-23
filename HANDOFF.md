@@ -72,9 +72,11 @@ purpose) isn't obvious from the code alone.
 
 NOVA is a programming language meant to eventually unify core logic, data
 modeling, UI, and APIs into one language — see
-[docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the binding spec (now
-covering v0.1 through v0.14) and [docs/adr/](docs/adr/) for the fifteen
-architectural decisions frozen so far.
+[docs/LANGUAGE_GUIDE.md](docs/LANGUAGE_GUIDE.md) for a complete guided tour
+of the language as it exists today, [docs/SPECIFICATION.md](docs/SPECIFICATION.md)
+for the binding spec (now covering v0.1 through v0.14), and
+[docs/adr/](docs/adr/) for the fifteen architectural decisions frozen so
+far.
 
 ## Project conventions worth knowing
 
