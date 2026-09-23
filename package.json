@@ -1,11 +1,23 @@
 {
   "name": "nova-lang",
-  "version": "0.12.0",
-  "description": "NOVA - a unified, natural-reading programming language. v0.1-v0.12: core language, lists/records, typed procedures, DATA named types, persistence, a stdlib, ASK input, list indexing, TRY/CATCH, and a PAGE compiler spanning static HTML, data-bound content, and client-side interactivity.",
+  "version": "0.14.0",
+  "description": "NOVA - a unified, natural-reading programming language. Core language, lists/records, typed procedures, DATA named types, persistence, a stdlib, ASK input, TRY/CATCH, a PAGE compiler (static/data-bound/interactive HTML), and SERVICE/API (a live HTTP server).",
   "type": "module",
+  "main": "./src/nova.js",
+  "exports": {
+    ".": "./src/nova.js"
+  },
   "bin": {
     "nova": "./src/cli.js"
   },
+  "files": [
+    "src/",
+    "examples/",
+    "docs/",
+    "README.md",
+    "HANDOFF.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node test/run.js",
     "run": "node src/cli.js run",
@@ -14,5 +26,23 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "keywords": [
+    "nova",
+    "nova-lang",
+    "programming-language",
+    "interpreter",
+    "compiler",
+    "cli",
+    "dsl"
+  ],
+  "author": "Sharif_tech",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sharifwa123/nova-lang.git"
+  },
+  "homepage": "https://github.com/Sharifwa123/nova-lang#readme",
+  "bugs": {
+    "url": "https://github.com/Sharifwa123/nova-lang/issues"
+  }
 }
