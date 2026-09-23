@@ -40,6 +40,11 @@ npm install -g nova-lang
 nova run yourfile.nova
 ```
 
+`npm install` itself will look terse (`added 1 package in Xs`) — that's
+expected: `nova-lang` has zero dependencies, so there's nothing else for
+npm to report. Run `nova` with no arguments right after installing to see
+a quick usage summary.
+
 `nova-lang` can also be used as a library in a Node project
 (`npm install nova-lang`):
 
