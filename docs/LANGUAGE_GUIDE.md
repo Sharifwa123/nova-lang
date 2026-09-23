@@ -485,7 +485,9 @@ Product` and `DO Product` can coexist without conflict.
 ## 13. Persistence: SAVE / GET / DELETE
 
 NOVA keeps one in-memory collection per `DATA` type, alive for as long as
-the program (or server — see §18) is running.
+the program (or server — see §18) is running. For a `nova serve` process
+specifically, that data now also survives a real restart of the process
+itself — see "Durable persistence" at the end of §18.
 
 ```nova
 DATA Product
@@ -868,13 +870,51 @@ same populated store). This is what lets a page's own `CALL API` button
 route can't share the same path — that's a compile-time error, not a
 runtime ambiguity.
 
+### Durable persistence
+
+`nova serve path/to/app.nova` now keeps its data across a real restart of
+the process, not just across requests within one already-running process
+(which was already true). It does this by reading and writing a plain
+JSON file, `path/to/app.nova.data.json`, next to your source file — no
+setup, no config, nothing to install (this project stays at zero npm
+dependencies).
+
+This is entirely automatic and needs no new syntax: `SAVE`/`GET`/`DELETE`
+work exactly as described in §13. There's exactly one thing worth
+understanding about it: **a file's top-level `SAVE` statements still run
+every time the server boots**, restart or not — persistence doesn't
+change that. If your file seeds some starting data unconditionally, guard
+it so a restart doesn't add it a second time, using ordinary NOVA you
+already have:
+
+```nova
+DATA Product
+    name: text
+    price: decimal
+END
+
+IF LENGTH(GET Product) == 0
+    SAVE { name: "Widget", price: 9.99 }
+    SAVE { name: "Gizmo", price: 14.50 }
+END
+```
+
+Data a *request* adds (through a `POST` handler, or a real visitor
+submitting a `FORM`, §17) is never re-added on restart — only a file's own
+unconditional top-level `SAVE`s need this guard, and only if you don't
+want them repeated.
+
+The `.data.json` file is meant to be regenerated, not committed — treat it
+like `dist/` (§17): safe to delete, and NOVA's own `.gitignore` already
+excludes it.
+
 ## 19. The command line
 
 | Command | What it does |
 |---|---|
 | `nova run <file>.nova` | Runs the file's statements top to bottom, printing `SHOW` output and prompting for `ASK` input, exactly like an ordinary script. |
 | `nova build <file>.nova` | Runs the file's statements once, silently, then compiles every `PAGE` declaration to HTML under a `dist/` folder next to the file. |
-| `nova serve <file>.nova [port]` | Runs the file's statements once, silently, then starts a live HTTP server for every `SERVICE`/`API` declaration *and* every `PAGE` declaration (default port `3000`). |
+| `nova serve <file>.nova [port]` | Runs the file's statements once, silently, then starts a live HTTP server for every `SERVICE`/`API` declaration *and* every `PAGE` declaration (default port `3000`). Reads/writes `<file>.nova.data.json` next to the file, so data survives a real restart. |
 
 A single file can hold ordinary script statements, `PAGE`s, and a
 `SERVICE` all at once — which parts actually do anything depends entirely

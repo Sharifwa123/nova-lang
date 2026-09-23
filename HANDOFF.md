@@ -6,7 +6,7 @@ Read this section first; the rest of the file is the detailed history and
 rationale behind it.
 
 **State**: v0.1 through v0.12 (the entire originally-planned roadmap) plus
-v0.13-v0.16 — the milestones past it: `SERVICE`/`API`, a real, live HTTP
+v0.13-v0.17 — the milestones past it: `SERVICE`/`API`, a real, live HTTP
 server, with `GET` (v0.13) and `POST` + `REQUEST AS <DataType>` (v0.14,
 reading/validating the real JSON request body); v0.15 connects `PAGE` and
 `SERVICE` for the first time — `nova serve` now serves compiled `PAGE`
@@ -14,17 +14,22 @@ HTML alongside the API, `BUTTON` is allowed inside `FOR EACH`, and a click
 handler can `CALL API` a declared endpoint and reflect the real result;
 v0.16 adds `FORM`/`INPUT` — a page can now collect genuinely typed user
 input (not just data already known at build time) and send it to that
-same live API. Both verified with a real spawned server, a real
-browser-equivalent script execution (typed/checked DOM values included),
-and a real persisted record (`test/run-examples.js`).
-290 unit tests, 56 examples verified through the *real* CLI (not just
-in-process calls), 17 ADRs, zero npm dependencies, MIT licensed. Verify it
+same live API; v0.17 makes `nova serve` durable — `SAVE`/`GET`/`DELETE`
+data now survives a real restart of the server process (a JSON file next
+to the source, no new syntax, no new dependency), not just requests
+within one already-running process. All verified with a real spawned
+server, a real browser-equivalent script execution (typed/checked DOM
+values included), and — for v0.17 specifically — a real process kill and
+a second, separate real process reading back what the first one wrote
+(`test/run-examples.js`).
+304 unit tests, 57 examples verified through the *real* CLI (not just
+in-process calls), 18 ADRs, zero npm dependencies, MIT licensed. Verify it
 yourself before doing anything else:
 ```bash
 git clone https://github.com/Sharifwa123/nova-lang.git && cd nova-lang
 node test/run.js && node test/run-examples.js
 ```
-If that's not 290/290 and 56/56, something's wrong with *your*
+If that's not 304/304 and 57/57, something's wrong with *your*
 environment, not the code — stop and figure out why before writing
 anything new.
 
@@ -52,25 +57,22 @@ anything new.
 
 **What's actually next**, per this file's own roadmap section below —
 genuinely new ground (v0.13's `SERVICE`/`API`, v0.14's `POST`/`REQUEST AS`,
-v0.15's `PAGE`/`SERVICE` integration, and v0.16's `FORM`/`INPUT` were the
-first four pieces of this list; see ADR-014/ADR-015/ADR-016/ADR-017). The
-order below is a full-stack-app priority order, not just "whatever's
-next":
-1. **Durable persistence** — everything `SAVE`/`GET`/`DELETE` does today
-   is in-memory only; a real server restart loses every record. This is
-   the next milestone.
-2. `PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
-   routing — v0.14 added `POST` (with `REQUEST AS <DataType>` validating
+v0.15's `PAGE`/`SERVICE` integration, v0.16's `FORM`/`INPUT`, and v0.17's
+durable `nova serve` persistence were the first five pieces of this list;
+see ADR-014/ADR-015/ADR-016/ADR-017/ADR-018). The order below is a
+full-stack-app priority order, not just "whatever's next":
+1. **`PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
+   routing** — v0.14 added `POST` (with `REQUEST AS <DataType>` validating
    the JSON body against a flat, primitive-only `DATA` shape); `PUT`
    implies "update this existing id" and `DELETE` needs no body at all,
    each a distinct enough question that ADR-015 deliberately left them
    for later. Also still deferred: nested `DATA`/`list`/`record` fields
-   in a `REQUEST AS` shape.
-3. Auth/security basics (`SECURITY`, still reserved).
-4. Real layout — containers/images; today `PAGE` compiles to bare
+   in a `REQUEST AS` shape. This is the next milestone.
+2. Auth/security basics (`SECURITY`, still reserved).
+3. Real layout — containers/images; today `PAGE` compiles to bare
    `<h1>`/`<p>`/`<button>`/`<input>` tags with no wrapping elements, so
    layout is CSS-positional-selector-only.
-5. SPA navigation — every `PAGE` is currently its own served route with a
+4. SPA navigation — every `PAGE` is currently its own served route with a
    full page load; no client-side route transitions.
 
 Also still deferred, lower priority than the above: a developer-chosen
@@ -283,8 +285,14 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 - No named-constructor syntax for `DATA` types (`Product { ... }`) — a bare
   `{ ... }` record literal, checked against the expected type, is still the
   only construction syntax.
-- Persistence is in-memory only (no file/durable backing yet) and has no
-  `WHERE`-style filtering — `GET` always returns everything of a type.
+- Persistence has no `WHERE`-style filtering — `GET` always returns
+  everything of a type. `nova serve` is durable across restarts (v0.17,
+  ADR-018 — a JSON file next to the source), but `nova run`/`nova build`
+  remain deliberately in-memory-only/one-shot, a separate question ADR-018
+  left open. A durable `nova serve`'s own top-level `SAVE`s still run
+  every boot — a program seeding data unconditionally has to guard it
+  itself (`IF LENGTH(GET X) == 0 ...`), not something the interpreter
+  does for it.
 - Stdlib is six procedures (ADR-007). `ASK` has no text-to-number parsing
   builtin yet (its result is always `text`).
 - `TRY`/`CATCH` catches runtime errors only, gives `text`-only error
@@ -329,34 +337,37 @@ These are all named as DEFERRED in docs/SPECIFICATION.md, not oversights:
 ## What's next
 
 **Every milestone in the v0.1–v0.12 roadmap is implemented, plus
-v0.13–v0.16 (`SERVICE`/`API`, ADR-014/ADR-015; `PAGE`/`SERVICE`
-integration, ADR-016; `FORM`/`INPUT`, ADR-017) — the milestones past that
-roadmap.** What's left, in the priority order a full-stack app actually
-needs (see the briefing at the top of this file):
+v0.13–v0.17 (`SERVICE`/`API`, ADR-014/ADR-015; `PAGE`/`SERVICE`
+integration, ADR-016; `FORM`/`INPUT`, ADR-017; durable `nova serve`
+persistence, ADR-018) — the milestones past that roadmap.** What's left,
+in the priority order a full-stack app actually needs (see the briefing
+at the top of this file):
 
-1. **Durable (file-backed, not in-memory-only) persistence** — next up.
-2. `PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
-   routing — v0.14 added `POST` + `REQUEST AS <DataType>` (validated
+1. **`PUT`/`DELETE` on `API`, plus path parameters/query-string parsing in
+   routing** — v0.14 added `POST` + `REQUEST AS <DataType>` (validated
    against a flat, primitive-only `DATA` shape); `PUT` implies "update
    this existing id" and `DELETE` needs no body at all, each its own real
    design question ADR-015 deliberately left open. Also still open:
-   nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape.
-3. Auth/security basics (`SECURITY`, still forward-reserved).
-4. Real layout — `PAGE` today compiles to bare tags with no wrapping
+   nested `DATA`/`list`/`record` fields in a `REQUEST AS` shape. Next up.
+2. Auth/security basics (`SECURITY`, still forward-reserved).
+3. Real layout — `PAGE` today compiles to bare tags with no wrapping
    containers/images; layout is CSS-positional-selector-only.
-5. SPA navigation — no client-side route transitions yet; every `PAGE` is
+4. SPA navigation — no client-side route transitions yet; every `PAGE` is
    its own full page load.
-6. Mobile/desktop targets, native compilation/self-hosting — explicitly
+5. Mobile/desktop targets, native compilation/self-hosting — explicitly
    multi-month-plus territory.
 
 Lower priority than all of the above: a developer-chosen `CALL API`
 success/failure label, and statically cross-checking a `CALL API`
 payload's shape against its target handler's own `REQUEST AS` type — v0.15
 (ADR-016) deliberately shipped without either (a fixed label; a
-runtime-only shape check, same as any other client gets), and v0.16
-(ADR-017) didn't revisit it.
+runtime-only shape check, same as any other client gets), and neither
+v0.16 (ADR-017) nor v0.17 (ADR-018) revisited it. Also lower priority:
+durability for `nova run`/`nova build` (ADR-018 scoped durability to
+`nova serve` only), and concurrent-writer safety for two `nova serve`
+processes sharing one data file.
 
-The process discipline that held for 17 milestones and is worth
+The process discipline that held for 18 milestones and is worth
 continuing for anything past this point: **ADR before implementation**
 for any real design decision, smallest-correct-version per milestone
 (resist doing three milestones' worth of surface in one pass), and

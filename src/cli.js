@@ -8,6 +8,7 @@ import { Interpreter } from "./interpreter/interpreter.js";
 import { compileProgram } from "./pagecompiler/compile.js";
 import { startServer } from "./apiserver/serve.js";
 import { formatDiagnostic, NovaError } from "./diagnostics/diagnostic.js";
+import { loadStoreFile, saveStoreFile } from "./persistence/store.js";
 
 function usage() {
   console.error("Usage: nova run <file>.nova");
@@ -88,6 +89,11 @@ function buildCommand(filePath) {
 // but then, instead of writing files and exiting, starts a real HTTP
 // server and keeps this SAME interpreter (and its store) alive across
 // every request, so SAVE/GET inside an API handler are genuinely live.
+// ADR-018 — before that boot run, an existing `<filePath>.data.json` (a
+// prior run's durable store) is loaded into the interpreter first, so the
+// boot run's own top-level statements execute against already-persisted
+// data, not an empty store; a program that seeds data unconditionally is
+// expected to guard it (`IF LENGTH(GET X) == 0`), not the interpreter.
 function serveCommand(filePath, portArg) {
   const source = readSourceOrExit(filePath);
   let program;
@@ -101,7 +107,15 @@ function serveCommand(filePath, portArg) {
     throw e;
   }
 
+  const dataFilePath = `${filePath}.data.json`;
   const interpreter = new Interpreter(program, {}, { write: () => {}, writePrompt: () => {} });
+  try {
+    const loadedStore = loadStoreFile(dataFilePath);
+    if (loadedStore) interpreter.store = loadedStore;
+  } catch (e) {
+    console.error(e.message);
+    process.exit(2);
+  }
   try {
     interpreter.run();
   } catch (e) {
@@ -111,9 +125,12 @@ function serveCommand(filePath, portArg) {
     }
     throw e;
   }
+  const persist = () => saveStoreFile(dataFilePath, interpreter.store);
+  persist(); // ADR-018 — write immediately after the boot run, so a fresh
+  // data file exists (with nextId captured) even before the first request.
 
   const port = portArg !== undefined ? Number(portArg) : 3000;
-  startServer(interpreter, program, { port });
+  startServer(interpreter, program, { port, persist });
 }
 
 function main() {

@@ -3,3 +3,4 @@ node_modules/
 dist/
 *.vsix
 *.tgz
+*.nova.data.json

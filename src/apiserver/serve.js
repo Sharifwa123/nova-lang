@@ -71,7 +71,7 @@ async function readJsonBody(req) {
   }
 }
 
-async function handleRequest(req, res, interpreter, routes, pageRoutes) {
+async function handleRequest(req, res, interpreter, routes, pageRoutes, persist) {
   const url = new URL(req.url, "http://localhost");
   // Declared routes are stored under their literal, already-decoded text
   // (e.g. `API GET "/café"` registers the key "GET /café"), but a real
@@ -104,7 +104,18 @@ async function handleRequest(req, res, interpreter, routes, pageRoutes) {
   }
   const requestBody = await readJsonBody(req);
   try {
-    const result = interpreter.invokeApiHandler(api.body, requestBody);
+    let result;
+    try {
+      result = interpreter.invokeApiHandler(api.body, requestBody);
+    } finally {
+      // ADR-018 — a handler reaching this point may have already run
+      // SAVE/DELETE before erroring (e.g. a mismatched second REQUEST AS
+      // call after a first SAVE succeeded), so this persists on either
+      // path below, not just the success one - matching the pre-existing
+      // in-memory behavior, where whatever mutations happened, happened,
+      // regardless of the handler's eventual outcome.
+      persist?.();
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(valueToJSON(result)));
   } catch (e) {
@@ -127,9 +138,12 @@ async function handleRequest(req, res, interpreter, routes, pageRoutes) {
 }
 
 // The actual (req, res) => void handler passed to http.createServer.
-export function createRequestListener(interpreter, routes, pageRoutes = new Map()) {
+// `persist`, if given (ADR-018 — `nova serve` only; every existing/
+// in-process caller omits it and stays purely in-memory, unchanged), is
+// called once after every request that reached a declared API handler.
+export function createRequestListener(interpreter, routes, pageRoutes = new Map(), persist = null) {
   return (req, res) => {
-    handleRequest(req, res, interpreter, routes, pageRoutes).catch((e) => {
+    handleRequest(req, res, interpreter, routes, pageRoutes, persist).catch((e) => {
       // An actual interpreter bug reaching here, already past the
       // NovaError handling above - crash loudly rather than hide it
       // (Node's default for an uncaught exception in a request handler).
@@ -144,13 +158,13 @@ export function createRequestListener(interpreter, routes, pageRoutes = new Map(
 // just start it, and tests can close it). `port: 0` asks the OS for an
 // ephemeral port - the actual bound port (not necessarily `port`) is what
 // gets logged, read back from the server itself once it's listening.
-export function startServer(interpreter, program, { port = 3000, log = console.log } = {}) {
+export function startServer(interpreter, program, { port = 3000, log = console.log, persist = null } = {}) {
   const routes = collectApiRoutes(program);
   // ADR-016 — PAGE routes are compiled once here, against the same
   // already-populated store `nova build` uses (ADR-012's snapshot model
   // is unchanged: pages do not recompile per request).
   const pageRoutes = collectPageRoutes(program, interpreter.store);
-  const server = http.createServer(createRequestListener(interpreter, routes, pageRoutes));
+  const server = http.createServer(createRequestListener(interpreter, routes, pageRoutes, persist));
   server.listen(port, () => {
     log(`NOVA service listening on http://localhost:${server.address().port}`);
   });
