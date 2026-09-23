@@ -10,7 +10,7 @@ while remaining precise enough for a real compiler pipeline — one language
 meant to eventually span core logic, data, UI, and APIs, instead of
 stitching together a different language per layer.
 
-This repository implements **v0.1 through v0.15**: v0.1–v0.12 is every
+This repository implements **v0.1 through v0.16**: v0.1–v0.12 is every
 milestone in the language's core design roadmap — lexer → parser → AST →
 semantic analyzer → tree-walking interpreter, covering the core language
 (SHOW/SET/CHANGE/IF/FOR EACH/REPEAT/DO/RETURN), lists/records, typed
@@ -19,15 +19,17 @@ procedures, `DATA` named types, in-memory persistence (`SAVE`/`GET`/
 `TRY`/`CATCH` error handling, and a `PAGE` compiler (`nova build`)
 spanning static HTML, data-bound content, and real client-side
 interactivity (`BUTTON`/`WHEN CLICKED` compiled to JavaScript). v0.13
-through v0.15 are the milestones past that original roadmap: `SERVICE`/
+through v0.16 are the milestones past that original roadmap: `SERVICE`/
 `API` compile to a real, live HTTP server (`nova serve`) sharing one
 persistence store across every request, with `GET` (v0.13) and `POST` +
 `REQUEST AS <DataType>` (v0.14) reading and validating a real JSON request
 body; v0.15 connects `PAGE` and `SERVICE` for the first time — `nova
 serve` now serves compiled `PAGE` HTML alongside the API, `BUTTON` works
 inside `FOR EACH`, and a click handler can `CALL API` a declared endpoint
-and reflect the real result, so backend, API, and frontend can genuinely
-be written and run together from one file. Start with
+and reflect the real result; v0.16 adds `FORM`/`INPUT` so a page can
+collect genuinely typed user input and send it to that same live API — so
+backend, API, and frontend can genuinely be written and run together from
+one file. Start with
 [docs/LANGUAGE_GUIDE.md](docs/LANGUAGE_GUIDE.md) to learn the language and
 write programs; see [docs/SPECIFICATION.md](docs/SPECIFICATION.md) for the
 binding language specification, and [HANDOFF.md](HANDOFF.md) for project
@@ -86,6 +88,12 @@ node src/cli.js serve examples/booking_page.nova 3000     # PAGE + SERVICE toget
 # open http://localhost:3000/ in a browser and click "Book Now" - it
 # really calls the live API and books the room; confirm with:
 #   curl http://localhost:3000/reservations
+
+node src/cli.js serve examples/guest_book.nova 3000        # FORM/INPUT + SERVICE
+# open http://localhost:3000/ in a browser, type a name and a message,
+# and click "Post" - it really calls the live API with what you typed;
+# confirm with:
+#   curl http://localhost:3000/messages
 ```
 
 ```nova

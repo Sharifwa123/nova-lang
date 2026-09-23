@@ -401,7 +401,7 @@ export class Analyzer {
   // against the real DATA shape (reusing staticFieldType, the same
   // machinery ordinary .field access already uses). `stateVars` is the
   // whole PAGE's page-local state (name -> type), collected once up front.
-  validatePageElements(elements, loopVarStack, topLevel, stateVars) {
+  validatePageElements(elements, loopVarStack, topLevel, stateVars, formInputs = null) {
     let sawTitle = false;
     for (const el of elements) {
       if (el.kind === "FOR_EACH") {
@@ -418,9 +418,46 @@ export class Analyzer {
           el.body,
           [...loopVarStack, { name: el.loopVar.name, dataTypeName: el.dataTypeName }],
           false,
-          stateVars
+          stateVars,
+          formInputs
         );
         continue;
+      }
+
+      // ADR-017 — FORM is top-level only (the same first-version scoping
+      // BUTTON itself shipped with, ADR-013, before ADR-016 later lifted
+      // it) - a form per rendered record is a real, plausible future
+      // need, deliberately deferred. Its INPUTs are collected up front
+      // (collectFormInputs), the same "register names first" pattern
+      // collectPageStateVars already uses, so a BUTTON's CALL API payload
+      // can reference any of them regardless of where in the FORM body
+      // it itself appears.
+      if (el.kind === "FORM") {
+        if (!topLevel) {
+          err(
+            CODES.FORM_NOT_TOP_LEVEL,
+            "FORM must be at the top level of a PAGE, not inside FOR EACH or another FORM.",
+            el.span,
+            "A form per rendered record isn't supported yet.",
+            null
+          );
+        }
+        const inputs = this.collectFormInputs(el.elements);
+        this.validatePageElements(el.elements, loopVarStack, false, stateVars, inputs);
+        continue;
+      }
+
+      if (el.kind === "FORM_INPUT") {
+        if (formInputs === null) {
+          err(
+            CODES.FORM_INPUT_OUTSIDE_FORM,
+            "INPUT can only be used inside a FORM.",
+            el.span,
+            "INPUT declares one field of a FORM - it has no meaning outside one.",
+            "Move this inside a FORM ... END block."
+          );
+        }
+        continue; // type/duplicate-name already validated by collectFormInputs
       }
 
       if (el.kind === "BUTTON") {
@@ -428,25 +465,25 @@ export class Analyzer {
         // button's label and click-handler data are both resolved against
         // the concrete bound record at PAGE-compile time (loopVarStack),
         // the same way HEADING/TEXT already resolve loop-bound content.
-        this.checkPageContent(el.label, loopVarStack, stateVars);
-        for (const action of el.actions) this.checkButtonAction(action, stateVars, loopVarStack);
+        this.checkPageContent(el.label, loopVarStack, stateVars, formInputs);
+        for (const action of el.actions) this.checkButtonAction(action, stateVars, loopVarStack, formInputs);
         continue;
       }
 
       if ((el.kind === "TITLE" || el.kind === "STYLE" || el.kind === "SET") && !topLevel) {
         err(
           CODES.PAGE_TITLE_STYLE_NOT_TOP_LEVEL,
-          `${el.kind} must be at the top level of a PAGE, not inside FOR EACH.`,
+          `${el.kind} must be at the top level of a PAGE, not inside FOR EACH or FORM.`,
           el.span,
           el.kind === "SET"
-            ? "Page-local state is scoped to the whole PAGE, not to one iteration."
+            ? "Page-local state is scoped to the whole PAGE, not to one iteration or form."
             : `${el.kind === "TITLE" ? "A title" : "A stylesheet"} repeated once per record has no meaning.`,
           null
         );
       }
       if (el.kind === "SET") continue; // already validated by collectPageStateVars
 
-      this.checkPageContent(el.value, loopVarStack, stateVars);
+      this.checkPageContent(el.value, loopVarStack, stateVars, formInputs);
 
       if (el.kind === "STYLE" && staticLiteralType(el.value) !== "text") {
         err(
@@ -464,16 +501,50 @@ export class Analyzer {
     }
   }
 
+  // ADR-017 — collected once per FORM, up front, mirroring
+  // collectPageStateVars: validates every INPUT's type and name
+  // uniqueness in one pass, so the recursive validatePageElements walk
+  // below never has to re-check either.
+  collectFormInputs(elements) {
+    const inputs = new Map();
+    for (const el of elements) {
+      if (el.kind !== "FORM_INPUT") continue;
+      if (inputs.has(el.name.name)) {
+        err(
+          CODES.DUPLICATE_FORM_INPUT_NAME,
+          `"${el.name.name}" is already declared as an INPUT in this FORM.`,
+          el.name.span,
+          "Each FORM field needs its own name.",
+          `Rename one of the two, e.g. ${el.name.name}2.`
+        );
+      }
+      if (!REQUEST_SCALAR_TYPES.has(el.type)) {
+        err(
+          CODES.FORM_INPUT_UNSUPPORTED_TYPE,
+          `INPUT "${el.name.name}" must be integer, decimal, text, or boolean, but got "${el.type}".`,
+          el.typeSpan,
+          "A form field maps directly to one HTML <input>, which only has an unambiguous mapping for these four types.",
+          null
+        );
+      }
+      inputs.set(el.name.name, el.type);
+    }
+    return inputs;
+  }
+
   // ADR-012/ADR-013/ADR-016 — shared by any page-side value slot (ordinary
   // page content and a CALL API WITH payload field, ADR-016): valid iff
   // it's a plain literal, a field-access chain rooted at an enclosing FOR
   // EACH's loop variable (checked against that DATA type's real fields via
   // staticFieldType), or a bare reference to page-local state. Each call
   // site raises its own contextually-accurate error on failure.
-  isValidPageValueRef(expr, loopVarStack, stateVars) {
+  isValidPageValueRef(expr, loopVarStack, stateVars, formInputs = null) {
     if (isStaticLiteral(expr)) return true;
 
     if (expr.kind === "Identifier" && stateVars.has(expr.name)) return true;
+
+    // ADR-017 — a bare reference to an enclosing FORM's own INPUT name.
+    if (expr.kind === "Identifier" && formInputs && formInputs.has(expr.name)) return true;
 
     if (expr.kind === "FieldAccess") {
       const fields = [];
@@ -495,20 +566,21 @@ export class Analyzer {
     return false;
   }
 
-  pageValueHintText(loopVarStack, stateVars) {
+  pageValueHintText(loopVarStack, stateVars, formInputs = null) {
     const hints = [];
     if (loopVarStack.length > 0) {
       hints.push(`a field of ${loopVarStack.map((f) => `"${f.name}"`).join("/")} (the current FOR EACH loop variable)`);
     }
     if (stateVars.size > 0) hints.push("a reference to page-local state declared with SET");
+    if (formInputs && formInputs.size > 0) hints.push("a reference to a FORM INPUT field");
     return hints.length > 0 ? ` or ${hints.join(", or ")}` : "";
   }
 
-  checkPageContent(expr, loopVarStack, stateVars) {
-    if (this.isValidPageValueRef(expr, loopVarStack, stateVars)) return;
+  checkPageContent(expr, loopVarStack, stateVars, formInputs = null) {
+    if (this.isValidPageValueRef(expr, loopVarStack, stateVars, formInputs)) return;
     err(
       CODES.PAGE_CONTENT_NOT_STATIC,
-      `This requires a plain literal value${this.pageValueHintText(loopVarStack, stateVars)} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
+      `This requires a plain literal value${this.pageValueHintText(loopVarStack, stateVars, formInputs)} (PAGE content is compiled, not run) — not a variable, call, or interpolated string.`,
       expr.span,
       "PAGE content is compiled, not run, so there is no variable state for anything else to resolve against.",
       null
@@ -520,9 +592,9 @@ export class Analyzer {
   // expression - see assertNoUnsafeConstructs for why type/name
   // correctness and sandboxing are checked as two separate passes) or
   // CALL API (ADR-016) is allowed.
-  checkButtonAction(action, stateVars, loopVarStack) {
+  checkButtonAction(action, stateVars, loopVarStack, formInputs = null) {
     if (action.kind === "CallApiStatement") {
-      this.checkCallApiAction(action, stateVars, loopVarStack);
+      this.checkCallApiAction(action, stateVars, loopVarStack, formInputs);
       return;
     }
     if (action.kind !== "ChangeStatement") {
@@ -573,7 +645,7 @@ export class Analyzer {
   // surfaces at runtime exactly like it would for any other client
   // (E-RUN-008/E-RUN-009), reaching this page as an ordinary failed
   // request.
-  checkCallApiAction(action, stateVars, loopVarStack) {
+  checkCallApiAction(action, stateVars, loopVarStack, formInputs = null) {
     const key = `${action.method} ${action.route}`;
     if (!this.apiRoutes.has(key)) {
       const available = [...this.apiRoutes.keys()];
@@ -601,10 +673,10 @@ export class Analyzer {
           );
         }
         seenFields.set(field.name, field.nameSpan);
-        if (!this.isValidPageValueRef(field.value, loopVarStack, stateVars)) {
+        if (!this.isValidPageValueRef(field.value, loopVarStack, stateVars, formInputs)) {
           err(
             CODES.CALL_API_PAYLOAD_NOT_STATIC,
-            `This field must be a plain literal${this.pageValueHintText(loopVarStack, stateVars)} — CALL API's payload is built at compile time, not run.`,
+            `This field must be a plain literal${this.pageValueHintText(loopVarStack, stateVars, formInputs)} — CALL API's payload is built at compile time, not run.`,
             field.value.span
           );
         }

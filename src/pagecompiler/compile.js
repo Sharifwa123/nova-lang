@@ -89,14 +89,41 @@ function resolvePageValueRaw(expr, bindings) {
   return rawJsValue(value);
 }
 
-// ADR-016 — resolves a CALL API WITH record literal to a plain JS object
-// (compile-time, mirroring how a data-bound HEADING resolves its text).
-function resolvePayload(recordLiteral, bindings) {
-  const obj = {};
-  for (const field of recordLiteral.fields) {
-    obj[field.name] = resolvePageValueRaw(field.value, bindings);
+// ADR-017 — compiles one CALL API WITH-payload field's value to JS SOURCE
+// TEXT, not a resolved value: a loop-variable field or literal is still a
+// compile-time constant (JSON.stringify'd, as ADR-016 established), but
+// page-local state and a FORM INPUT can only be known at click/submit
+// time, so each compiles to a live JS expression instead - `state.x` (the
+// same live reference every click handler already reads/writes) or a
+// type-converted DOM read. This also fixes a latent ADR-016 bug: a
+// page-local-state payload field was already accepted by the analyzer but
+// silently compiled to `undefined` (resolvePageValueRaw only ever handled
+// FieldAccess/literal, never a bare state Identifier).
+function compilePayloadFieldToJs(expr, bindings, formInputs) {
+  if (expr.kind === "FieldAccess") {
+    return JSON.stringify(resolvePageValueRaw(expr, bindings));
   }
-  return obj;
+  if (expr.kind === "Identifier" && formInputs && formInputs.has(expr.name)) {
+    const { id, type } = formInputs.get(expr.name);
+    const idJson = JSON.stringify(id);
+    if (type === "boolean") return `document.getElementById(${idJson}).checked`;
+    if (type === "integer" || type === "decimal") return `Number(document.getElementById(${idJson}).value)`;
+    return `document.getElementById(${idJson}).value`;
+  }
+  if (expr.kind === "Identifier") {
+    return `state.${expr.name}`; // page-local state - live read
+  }
+  return JSON.stringify(literalJsValue(expr));
+}
+
+// ADR-016/ADR-017 — resolves a CALL API WITH record literal to a JS
+// object-literal EXPRESSION STRING (some fields baked constants, some
+// live reads - see compilePayloadFieldToJs).
+function compilePayloadToJs(recordLiteral, bindings, formInputs) {
+  const parts = recordLiteral.fields.map(
+    (f) => `${JSON.stringify(f.name)}: ${compilePayloadFieldToJs(f.value, bindings, formInputs)}`
+  );
+  return `{ ${parts.join(", ")} }`;
 }
 
 // ADR-013 — translates one already-validated "safe" expression (literal,
@@ -141,8 +168,9 @@ export function compilePage(page, store = new Map()) {
   const buttons = []; // { fnName, actions: ChangeStatement[] }
   let nextElementId = 0;
   let nextButtonId = 0;
+  let nextInputId = 0;
 
-  function render(elements, bindings) {
+  function render(elements, bindings, formInputs = null) {
     for (const el of elements) {
       if (el.kind === "FOR_EACH") {
         const collection = store.get(el.dataTypeName);
@@ -155,22 +183,47 @@ export function compilePage(page, store = new Map()) {
         continue;
       }
 
+      // ADR-017 — a FORM renders no wrapping HTML element of its own
+      // (the same "just flattens into the body" precedent FOR_EACH
+      // already set) - its only job is to collect its INPUTs' ids/types
+      // up front (so a BUTTON referencing one declared after it, or
+      // before it, both work) and thread that map through its own body.
+      if (el.kind === "FORM") {
+        const formInputMap = new Map();
+        for (const child of el.elements) {
+          if (child.kind !== "FORM_INPUT") continue;
+          formInputMap.set(child.name.name, { id: `novaInput_${nextInputId++}`, type: child.type });
+        }
+        render(el.elements, bindings, formInputMap);
+        continue;
+      }
+
+      if (el.kind === "FORM_INPUT") {
+        const { id } = formInputs.get(el.name.name);
+        const labelText = escapeHtml(el.label ?? el.name.name);
+        const inputType = el.type === "boolean" ? "checkbox" : el.type === "text" ? "text" : "number";
+        const stepAttr = el.type === "decimal" ? ' step="any"' : el.type === "integer" ? ' step="1"' : "";
+        bodyParts.push(`  <label for="${id}">${labelText}</label>`);
+        bodyParts.push(`  <input id="${id}" type="${inputType}"${stepAttr}>`);
+        continue;
+      }
+
       if (el.kind === "SET") {
         initialState[el.name.name] = literalJsValue(el.value);
         continue;
       }
 
       if (el.kind === "BUTTON") {
-        // ADR-016 — `bindings` (the current FOR EACH record, if any) is
-        // captured alongside the actions so a CALL API's WITH payload can
-        // be resolved against the SAME concrete record this button's own
-        // label already is (resolvePageValue, just above). A stable id
-        // lets a CALL API action's generated function reach back into the
-        // DOM for its own success/failure feedback.
+        // ADR-016/017 — `bindings` and `formInputs` (the enclosing FORM's
+        // own field ids/types, if any) are captured alongside the actions
+        // so a CALL API's WITH payload can resolve every kind of
+        // reference it's allowed (loop field, page state, or a FORM
+        // INPUT). A stable id lets a CALL API action's generated function
+        // reach back into the DOM for its own success/failure feedback.
         const buttonIndex = nextButtonId++;
         const fnName = `novaClick_${buttonIndex}`;
         const btnId = `novaBtn_${buttonIndex}`;
-        buttons.push({ fnName, btnId, actions: el.actions, bindings });
+        buttons.push({ fnName, btnId, actions: el.actions, bindings, formInputs });
         const labelText = escapeHtml(resolvePageValue(el.label, bindings));
         bodyParts.push(`  <button id="${btnId}" onclick="${fnName}()">${labelText}</button>`);
         continue;
@@ -243,7 +296,7 @@ function buildScript(initialState, stateBoundElements, buttons) {
     lines.push(`  document.getElementById(${JSON.stringify(id)}).textContent = novaDisplay(state.${stateName});`);
   }
   lines.push(`}`);
-  for (const { fnName, btnId, actions, bindings } of buttons) {
+  for (const { fnName, btnId, actions, bindings, formInputs } of buttons) {
     const isAsync = actions.some((a) => a.kind === "CallApiStatement");
     lines.push(`${isAsync ? "async " : ""}function ${fnName}() {`);
     if (isAsync) {
@@ -258,7 +311,7 @@ function buildScript(initialState, stateBoundElements, buttons) {
       const fetchOpts = [`method: ${JSON.stringify(action.method)}`];
       if (action.payload) {
         fetchOpts.push(`headers: { "Content-Type": "application/json" }`);
-        fetchOpts.push(`body: JSON.stringify(${JSON.stringify(resolvePayload(action.payload, bindings))})`);
+        fetchOpts.push(`body: JSON.stringify(${compilePayloadToJs(action.payload, bindings, formInputs)})`);
       }
       lines.push(`  novaBtn.disabled = true;`);
       lines.push(`  try {`);

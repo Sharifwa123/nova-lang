@@ -1285,3 +1285,68 @@ New diagnostics:
 Everything else in §1–§17 and the v0.2–v0.14 amendments above is
 unchanged — a `PAGE` with no `BUTTON`-in-loop and no `CALL API`, and
 `nova build` itself, keep their exact current behavior.
+
+---
+
+## v0.16 Amendments — FORM / INPUT: Collecting Real User Input (ADR-017)
+
+Status: Implemented (this repository). See
+[docs/adr/ADR-017-page-forms.md](adr/ADR-017-page-forms.md) for full
+rationale.
+
+**§2.6 (amended)** — one new keyword: `FORM`. `INPUT` is reused verbatim
+(the same keyword `DO` parameters already use).
+
+**New grammar**:
+```
+page-element ::= ... (unchanged) | form-element
+form-element ::= "FORM" NEWLINE page-element* "END"
+form-input   ::= "INPUT" identifier ":" type-name string-literal?
+```
+`INPUT` is parsed generically, as one more `page-element` (the same
+"parse generically, restrict semantically" precedent `CALL API` and
+`WHEN CLICKED`'s body already use) — "INPUT outside a FORM" is a semantic
+error (`E-SEM-049`), not a parser-level restriction.
+
+DECISION: an `INPUT`'s type must be `integer`/`decimal`/`text`/`boolean`
+— the same restriction `REQUEST AS <DataType>` already places on its own
+fields (ADR-015), for the same reason: a real HTML `<input>` only has an
+unambiguous mapping for these four (`E-SEM-052` otherwise).
+
+DECISION: `FORM` is top-level only inside a `PAGE`, not inside `FOR EACH`
+or another `FORM` (`E-SEM-050`) — the same first-version scoping `BUTTON`
+itself shipped with (ADR-013) before ADR-016 later lifted it. A form per
+rendered record is a real, plausible future need, deliberately deferred.
+Every `INPUT` name within one `FORM` must be unique (`E-SEM-051`).
+
+DECISION: inside a `FORM`, a `BUTTON`'s `CALL API ... WITH { field:
+<value> }` (ADR-016) may now reference an `INPUT`'s name directly, in
+addition to the existing literal/page-local-state/loop-variable-field
+references — checked by the same `isValidPageValueRef` predicate, one
+more case. Unlike those existing cases (all resolvable at PAGE-compile
+time), a form field's value is only known at submit time: the compiler
+now builds a `CALL API` payload as a JS object-literal **expression**
+(some fields still compile-time constants, some live reads —
+`document.getElementById(...).value`/`.checked`, type-converted per the
+field's declared type) rather than a single pre-resolved JSON value.
+
+**Bug fix picked up along the way**: a page-local-state reference inside
+a `WITH` payload was already syntactically accepted by the analyzer since
+ADR-016 shipped, but the compiler silently produced `undefined` for it
+(the payload-resolution helper only ever handled a loop-variable field or
+a literal, never a bare state `Identifier`). Rebuilding payload
+compilation as expression text fixes this: a state reference now
+correctly compiles to a live `state.x` read, exactly like a form field.
+
+New diagnostics:
+
+| Code | Meaning |
+|---|---|
+| E-SEM-049 | INPUT used outside a FORM |
+| E-SEM-050 | FORM declared somewhere other than a PAGE's top level |
+| E-SEM-051 | Duplicate INPUT name within one FORM |
+| E-SEM-052 | INPUT with a non-integer/decimal/text/boolean type |
+
+Everything else in §1–§17 and the v0.2–v0.15 amendments above is
+unchanged — a `PAGE` with no `FORM`, and `nova build` itself, keep their
+exact current behavior.
